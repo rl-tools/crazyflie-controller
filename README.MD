@@ -1,7 +1,7 @@
 Install dependencies according to the [official docs](https://www.bitcraze.io/documentation/repository/crazyflie-firmware/master/building-and-flashing/build/)
 
 ```
-git submodule update --init --recursive -- external/crazyflie_firmware
+git submodule update --init --recursive -- external/firmware
 git submodule update --init -- external/rl_tools
 ```
 
@@ -14,7 +14,7 @@ brew install libusb
 
 ### build
 ```
-cd external/crazyflie_firmware
+cd external/firmware
 make cf2_defconfig
 cd ../../
 make

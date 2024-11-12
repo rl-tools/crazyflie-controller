@@ -4,3 +4,6 @@
 [submodule "external/firmware"]
 	path = external/firmware
 	url = https://github.com/rl-tools/crazyflie-firmware.git
+[submodule "data"]
+	path = data
+	url = https://github.com/rl-tools/crazyflie-controller-blob.git
