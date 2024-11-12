@@ -4,6 +4,8 @@
 #include <rl_tools/operations/arm.h>
 #include <rl_tools/nn/layers/dense/operations_arm/opt.h>
 #include <rl_tools/nn/layers/dense/operations_arm/dsp.h>
+#include <rl_tools/nn/layers/sample_and_squash/operations_generic.h>
+#include <rl_tools/nn_models/mlp/operations_generic.h>
 #include <rl_tools/nn_models/sequential/operations_generic.h>
 
 #include "data/actor.h"
@@ -18,26 +20,36 @@ namespace rlt = rl_tools;
 
 using DEV_SPEC = rlt::devices::DefaultARMSpecification;
 using DEVICE = rlt::devices::arm::OPT<DEV_SPEC>;
+using TI = typename DEVICE::index_t;
 DEVICE device;
-using ACTOR_TYPE = rlt::checkpoint::actor::MODEL;
-using TI = typename ACTOR_TYPE::SPEC::TI;
+using ACTOR_TYPE_ORIGINAL = rlt::checkpoint::actor::TYPE;
+static constexpr TI TEST_BATCH_SIZE = rlt::get<1>(rlt::checkpoint::example::input::SHAPE{});
+using ACTOR_TYPE_TEST = rlt::checkpoint::actor::TYPE::template CHANGE_BATCH_SIZE<TI, TEST_BATCH_SIZE>;
+using ACTOR_TYPE = ACTOR_TYPE_ORIGINAL::template CHANGE_BATCH_SIZE<TI, 1>;
 using T = typename ACTOR_TYPE::SPEC::T;
 constexpr TI CONTROL_FREQUENCY_MULTIPLE = 5;
 static TI controller_tick = 0;
-constexpr TI ACTION_HISTORY_LENGTH = 32; //rlt::checkpoint::environment::ACTION_HISTORY_LENGTH
+constexpr TI ACTION_HISTORY_LENGTH = 1; //rlt::checkpoint::environment::ACTION_HISTORY_LENGTH
 #ifdef RL_TOOLS_ACTION_HISTORY
-static_assert(ACTOR_TYPE::SPEC::INPUT_DIM == (18 + ACTION_HISTORY_LENGTH * ACTOR_TYPE::SPEC::OUTPUT_DIM));
+static constexpr TI INPUT_DIM = rlt::get_last(ACTOR_TYPE::INPUT_SHAPE{});
+static constexpr TI OUTPUT_DIM = rlt::get_last(ACTOR_TYPE::OUTPUT_SHAPE{});
+static_assert(INPUT_DIM == (18 + ACTION_HISTORY_LENGTH * OUTPUT_DIM));
 #else
 static_assert(ACTOR_TYPE::SPEC::INPUT_DIM == 18);
 #endif
 
+
 // State
-static ACTOR_TYPE::template Buffer<1, rlt::MatrixStaticTag> buffers;
-static rlt::MatrixStatic<rlt::matrix::Specification<T, TI, 1, ACTOR_TYPE::SPEC::INPUT_DIM>> input;
-static rlt::MatrixStatic<rlt::matrix::Specification<T, TI, 1, ACTOR_TYPE::SPEC::OUTPUT_DIM>> output;
+static ACTOR_TYPE_TEST::template Buffer<false> buffers_test;
+static ACTOR_TYPE::template Buffer<false> buffers;
+static rlt::Matrix<rlt::matrix::Specification<T, TI, 1, INPUT_DIM, false>> input;
+static rlt::Tensor<rlt::tensor::Specification<T, TI, rlt::tensor::Shape<TI, 1, 1, OUTPUT_DIM>, false>> output;
+static rlt::Tensor<rlt::tensor::Specification<T, TI, rlt::tensor::Shape<TI, 1, TEST_BATCH_SIZE, OUTPUT_DIM>, false>> output_test;
 #ifdef RL_TOOLS_ACTION_HISTORY
-static T action_history[ACTION_HISTORY_LENGTH][ACTOR_TYPE::SPEC::OUTPUT_DIM];
+static T action_history[ACTION_HISTORY_LENGTH][OUTPUT_DIM];
 #endif
+
+bool rng = false;
 
 
 // Helper functions (without side-effects)
@@ -71,12 +83,12 @@ static inline void observe_rotation_matrix(const rlt::Matrix<STATE_SPEC>& state,
 
 // Main functions (possibly with side effects)
 void rl_tools_init(){
-    rlt::malloc(device, buffers);
-    rlt::malloc(device, input);
-    rlt::malloc(device, output);
+    // rlt::malloc(device, buffers);
+    // rlt::malloc(device, input);
+    // rlt::malloc(device, output);
 #ifdef RL_TOOLS_ACTION_HISTORY
     for(TI step_i = 0; step_i < ACTION_HISTORY_LENGTH; step_i++){
-        for(TI action_i = 0; action_i < ACTOR_TYPE::SPEC::OUTPUT_DIM; action_i++){
+        for(TI action_i = 0; action_i < OUTPUT_DIM; action_i++){
             action_history[step_i][action_i] = 0;
         }
     }
@@ -90,11 +102,12 @@ char* rl_tools_get_checkpoint_name(){
 
 float rl_tools_test(float* output_mem){
 #ifndef RL_TOOLS_DISABLE_TEST
-    rlt::evaluate(device, rlt::checkpoint::actor::model, rlt::checkpoint::observation::container, output, buffers);
+    rlt::Mode<rlt::mode::Evaluation<>> mode;
+    rlt::evaluate(device, rlt::checkpoint::actor::module, rlt::checkpoint::example::input::container, output_test, buffers_test, rng, mode);
     float acc = 0;
-    for(int i = 0; i < ACTOR_TYPE::SPEC::OUTPUT_DIM; i++){
-        acc += std::abs(rlt::get(output, 0, i) - rlt::get(rlt::checkpoint::action::container, 0, i));
-        output_mem[i] = rlt::get(rlt::checkpoint::action::container, 0, i);
+    for(int i = 0; i < OUTPUT_DIM; i++){
+        acc += std::abs(rlt::get(device, output_test, 0, 0, i) - rlt::get(device, rlt::checkpoint::example::output::container, 0, 0, i));
+        output_mem[i] = rlt::get(device, rlt::checkpoint::example::output::container, 0, 0, i);
     }
     return acc;
 #else
@@ -103,29 +116,34 @@ float rl_tools_test(float* output_mem){
 }
 
 void rl_tools_control(float* state, float* actions){
-    rlt::MatrixDynamic<rlt::matrix::Specification<T, TI, 1, 13, rlt::matrix::layouts::RowMajorAlignment<TI, 1>>> state_matrix = {(T*)state}; 
+    rlt::Matrix<rlt::matrix::Specification<T, TI, 1, 13, true, rlt::matrix::layouts::RowMajorAlignment<TI, 1>>> state_matrix = {(T*)state}; 
     auto state_rotation_matrix_input = rlt::view(device, input, rlt::matrix::ViewSpec<1, 18>{}, 0, 0);
     observe_rotation_matrix(state_matrix, state_rotation_matrix_input);
 #ifdef RL_TOOLS_ACTION_HISTORY
-    auto action_history_observation = rlt::view(device, input, rlt::matrix::ViewSpec<1, ACTION_HISTORY_LENGTH * ACTOR_TYPE::SPEC::OUTPUT_DIM>{}, 0, 18);
+    auto action_history_observation = rlt::view(device, input, rlt::matrix::ViewSpec<1, ACTION_HISTORY_LENGTH * OUTPUT_DIM>{}, 0, 18);
     for(TI step_i = 0; step_i < ACTION_HISTORY_LENGTH; step_i++){
-        for(TI action_i = 0; action_i < ACTOR_TYPE::SPEC::OUTPUT_DIM; action_i++){
-            rlt::set(action_history_observation, 0, step_i * ACTOR_TYPE::SPEC::OUTPUT_DIM + action_i, action_history[step_i][action_i]);
+        for(TI action_i = 0; action_i < OUTPUT_DIM; action_i++){
+            rlt::set(action_history_observation, 0, step_i * OUTPUT_DIM + action_i, action_history[step_i][action_i]);
         }
     }
 #endif
-    rlt::MatrixDynamic<rlt::matrix::Specification<T, TI, 1, ACTOR_TYPE::SPEC::OUTPUT_DIM, rlt::matrix::layouts::RowMajorAlignment<TI, 1>>> output = {(T*)actions};
-    rlt::evaluate(device, rlt::checkpoint::actor::model, input, output, buffers);
+    rlt::Matrix<rlt::matrix::Specification<T, TI, 1, OUTPUT_DIM, true, rlt::matrix::layouts::RowMajorAlignment<TI, 1>>> output = {(T*)actions};
+    auto input_tensor = rlt::to_tensor(device, input);
+    auto input_tensor_unsqueezed = rlt::unsqueeze(device, input_tensor);
+    auto output_tensor = rlt::to_tensor(device, output);
+    auto output_tensor_unsqueezed = rlt::unsqueeze(device, output_tensor);
+    rlt::Mode<rlt::mode::Evaluation<>> mode;
+    rlt::evaluate(device, rlt::checkpoint::actor::module, input_tensor_unsqueezed, output_tensor_unsqueezed, buffers, rng, mode);
 #ifdef RL_TOOLS_ACTION_HISTORY
     int substep = controller_tick % CONTROL_FREQUENCY_MULTIPLE;
     if(substep == 0){
         for(TI step_i = 0; step_i < ACTION_HISTORY_LENGTH - 1; step_i++){
-            for(TI action_i = 0; action_i < ACTOR_TYPE::SPEC::OUTPUT_DIM; action_i++){
+            for(TI action_i = 0; action_i < OUTPUT_DIM; action_i++){
                 action_history[step_i][action_i] = action_history[step_i + 1][action_i];
             }
         }
     }
-    for(TI action_i = 0; action_i < ACTOR_TYPE::SPEC::OUTPUT_DIM; action_i++){
+    for(TI action_i = 0; action_i < OUTPUT_DIM; action_i++){
         T value = action_history[ACTION_HISTORY_LENGTH - 1][action_i];
         value *= substep;
         value += rlt::get(output, 0, action_i);
