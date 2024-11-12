@@ -1,0 +1,11 @@
+build
+*.o
+*.o.cmd
+.vscode/settings.json
+venv
+ablation_data
+*.tar.gz
+
+ablation_checkpoints
+ablation_data*
+.venv
