@@ -3,7 +3,7 @@
 
 #include <rl_tools/operations/arm.h>
 #include <rl_tools/nn/layers/dense/operations_arm/opt.h>
-#include <rl_tools/nn/layers/dense/operations_arm/dsp.h>
+// #include <rl_tools/nn/layers/dense/operations_generic.h>
 #include <rl_tools/nn/layers/sample_and_squash/operations_generic.h>
 #include <rl_tools/nn_models/mlp/operations_generic.h>
 #include <rl_tools/nn_models/sequential/operations_generic.h>
@@ -22,6 +22,7 @@ using DEV_SPEC = rlt::devices::DefaultARMSpecification;
 using DEVICE = rlt::devices::arm::OPT<DEV_SPEC>;
 using TI = typename DEVICE::index_t;
 DEVICE device;
+bool rng = false;
 using ACTOR_TYPE_ORIGINAL = rlt::checkpoint::actor::TYPE;
 static constexpr TI TEST_BATCH_SIZE = rlt::get<1>(rlt::checkpoint::example::input::SHAPE{});
 using ACTOR_TYPE_TEST = rlt::checkpoint::actor::TYPE::template CHANGE_BATCH_SIZE<TI, TEST_BATCH_SIZE>;
@@ -33,6 +34,7 @@ constexpr TI ACTION_HISTORY_LENGTH = 1; //rlt::checkpoint::environment::ACTION_H
 #ifdef RL_TOOLS_ACTION_HISTORY
 static constexpr TI INPUT_DIM = rlt::get_last(ACTOR_TYPE::INPUT_SHAPE{});
 static constexpr TI OUTPUT_DIM = rlt::get_last(ACTOR_TYPE::OUTPUT_SHAPE{});
+static_assert(OUTPUT_DIM == 4);
 static_assert(INPUT_DIM == (18 + ACTION_HISTORY_LENGTH * OUTPUT_DIM));
 #else
 static_assert(ACTOR_TYPE::SPEC::INPUT_DIM == 18);
@@ -44,12 +46,11 @@ static ACTOR_TYPE_TEST::template Buffer<false> buffers_test;
 static ACTOR_TYPE::template Buffer<false> buffers;
 static rlt::Matrix<rlt::matrix::Specification<T, TI, 1, INPUT_DIM, false>> input;
 static rlt::Tensor<rlt::tensor::Specification<T, TI, rlt::tensor::Shape<TI, 1, 1, OUTPUT_DIM>, false>> output;
-static rlt::Tensor<rlt::tensor::Specification<T, TI, rlt::tensor::Shape<TI, 1, TEST_BATCH_SIZE, OUTPUT_DIM>, false>> output_test;
+static rlt::Tensor<rlt::tensor::Specification<T, TI, rlt::checkpoint::example::output::SHAPE, false>> output_test;
 #ifdef RL_TOOLS_ACTION_HISTORY
 static T action_history[ACTION_HISTORY_LENGTH][OUTPUT_DIM];
 #endif
 
-bool rng = false;
 
 
 // Helper functions (without side-effects)
@@ -105,9 +106,13 @@ float rl_tools_test(float* output_mem){
     rlt::Mode<rlt::mode::Evaluation<>> mode;
     rlt::evaluate(device, rlt::checkpoint::actor::module, rlt::checkpoint::example::input::container, output_test, buffers_test, rng, mode);
     float acc = 0;
-    for(int i = 0; i < OUTPUT_DIM; i++){
-        acc += std::abs(rlt::get(device, output_test, 0, 0, i) - rlt::get(device, rlt::checkpoint::example::output::container, 0, 0, i));
-        output_mem[i] = rlt::get(device, rlt::checkpoint::example::output::container, 0, 0, i);
+    for(TI batch_i = 0; batch_i < TEST_BATCH_SIZE; batch_i++){
+        for(TI i = 0; i < OUTPUT_DIM; i++){
+            acc += rlt::math::abs(device.math, rlt::get(device, output_test, 0, batch_i, i) - rlt::get(device, rlt::checkpoint::example::output::container, 0, batch_i, i));
+            if(batch_i == 0){
+                output_mem[i] = rlt::get(device, output_test, 0, batch_i, i);
+            }
+        }
     }
     return acc;
 #else
