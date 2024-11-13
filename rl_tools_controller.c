@@ -522,6 +522,11 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
     {
       int64_t before = usecTimestamp();
       if(use_orig_controller == 0){
+        if (tick % (CONTROL_INTERVAL_MS * 1000) == 0){
+          for(uint8_t i=0; i<13; i++){
+            DEBUG_PRINT("state_input[%d]: %f\n", i, state_input[i]);
+          }
+        }
         rl_tools_control(state_input, action_output);
       }
       else{
