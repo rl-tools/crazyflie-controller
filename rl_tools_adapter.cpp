@@ -30,7 +30,7 @@ using ACTOR_TYPE = ACTOR_TYPE_ORIGINAL::template CHANGE_BATCH_SIZE<TI, 1>;
 using T = typename ACTOR_TYPE::SPEC::T;
 constexpr TI CONTROL_FREQUENCY_MULTIPLE = 5;
 static TI controller_tick = 0;
-constexpr TI ACTION_HISTORY_LENGTH = 1; //rlt::checkpoint::environment::ACTION_HISTORY_LENGTH
+constexpr TI ACTION_HISTORY_LENGTH = 16; //rlt::checkpoint::environment::ACTION_HISTORY_LENGTH
 #ifdef RL_TOOLS_ACTION_HISTORY
 static constexpr TI INPUT_DIM = rlt::get_last(ACTOR_TYPE::INPUT_SHAPE{});
 static constexpr TI OUTPUT_DIM = rlt::get_last(ACTOR_TYPE::OUTPUT_SHAPE{});
