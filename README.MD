@@ -1,3 +1,5 @@
+For good measure please install the `2023.2` firmware using `cfclient` first (to update all the decks and communication firmwares)
+
 Install dependencies according to the [official docs](https://www.bitcraze.io/documentation/repository/crazyflie-firmware/master/building-and-flashing/build/)
 
 ```
