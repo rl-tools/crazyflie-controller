@@ -29,7 +29,7 @@ static constexpr TI TEST_BATCH_SIZE = rlt::get<1>(rlt::checkpoint::example::inpu
 using ACTOR_TYPE_TEST = rlt::checkpoint::actor::TYPE::template CHANGE_BATCH_SIZE<TI, TEST_BATCH_SIZE>;
 using ACTOR_TYPE = ACTOR_TYPE_ORIGINAL::template CHANGE_BATCH_SIZE<TI, 1>;
 using T = typename ACTOR_TYPE::SPEC::T;
-constexpr TI CONTROL_FREQUENCY_MULTIPLE = 5;
+constexpr TI CONTROL_FREQUENCY_MULTIPLE = 5; // CONTROL_INTERVAL_MS = 2 => 500 Hz => CONTROL_FREQUENCY_MULTIPLE = 5 (to match the 100 Hz of training)
 static TI controller_tick = 0;
 constexpr TI ACTION_HISTORY_LENGTH = 16; //rlt::checkpoint::environment::ACTION_HISTORY_LENGTH
 #ifdef RL_TOOLS_ACTION_HISTORY

@@ -246,7 +246,7 @@ void controllerOutOfTreeInit(void){
   // trigger_mode = HOVER_PACKET;
   use_orig_controller = 0;
   waypoint_navigation_dynamic_current_waypoint = 0;
-  waypoint_navigation_dynamic_threshold = 0;
+  // waypoint_navigation_dynamic_threshold = 0;
 
   figure_eight_interval = 5.5;
   figure_eight_scale = 1;
