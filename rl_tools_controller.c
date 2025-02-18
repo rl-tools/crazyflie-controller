@@ -18,7 +18,7 @@
 
 #define CONTROL_INTERVAL_MS 2
 #define CONTROL_INTERVAL_US (CONTROL_INTERVAL_MS * 1000)
-#define CONTROL_PACKET_TIMEOUT_USEC (1000*200)
+#define CONTROL_PACKET_TIMEOUT_USEC (1000*300)
 #define BEHIND_SCHEDULE_MESSAGE_MIN_INTERVAL (1000000)
 #define CONTROL_INVOCATION_INTERVAL_ALPHA 0.95f
 #define DEBUG_MEASURE_FORWARD_TIME
@@ -297,6 +297,36 @@ static void setMotorRatios(const motors_thrust_pwm_t* motorPwm)
 }
 
 
+#define RL_TOOLS_ACTION_HISTORY_LENGTH (32)
+float action_history[RL_TOOLS_ACTION_HISTORY_LENGTH * 4];
+int current_action_history_step = 0;
+bool action_history_set = false;
+
+void get_action_history(){
+  action_history_set = rl_tools_get_action_history(action_history, RL_TOOLS_ACTION_HISTORY_LENGTH * 4);
+  current_action_history_step = 0;
+}
+
+
+void print_action_history(){
+  if(action_history_set){
+    DEBUG_PRINT("Action history step %d: ", current_action_history_step);
+    for(int j = 0; j < 4; j++){
+      DEBUG_PRINT("%f ", action_history[current_action_history_step*4+j]);
+    }
+    DEBUG_PRINT("\n");
+    current_action_history_step++;
+    if(current_action_history_step >= RL_TOOLS_ACTION_HISTORY_LENGTH){
+      action_history_set = false;
+    }
+  }
+}
+
+
+static inline void every_100ms(){
+  // print_action_history();
+}
+
 static inline void every_500ms(){
 #ifdef PRINT_TWIST
   DEBUG_PRINT("tw.l: %5.2f, %5.2f, %5.2f tw.a: %5.2f, %5.2f, %5.2f\n", state_input[7], state_input[8], state_input[9], state_input[10], state_input[11], state_input[12]);
@@ -309,17 +339,21 @@ static inline void every_1000ms(){
   DEBUG_PRINT("rpy: %5.2f, %5.2f, %5.2f\n", attitude_rpy[0], attitude_rpy[1], attitude_rpy[2]);
 #endif
 
-  DEBUG_PRINT("Last setpoint: x disposition/mode %f/%f/%d\n", last_setpoint.position.x, last_setpoint.velocity.x, last_setpoint.mode.x);
-  DEBUG_PRINT("Last setpoint: y disposition/mode %f/%f/%d\n", last_setpoint.position.y, last_setpoint.velocity.y, last_setpoint.mode.y);
-  DEBUG_PRINT("Last setpoint: z disposition/mode %f/%f/%d\n", last_setpoint.position.z, last_setpoint.velocity.z, last_setpoint.mode.z);
+  // DEBUG_PRINT("Last setpoint: x disposition/mode %f/%f/%d\n", last_setpoint.position.x, last_setpoint.velocity.x, last_setpoint.mode.x);
+  // DEBUG_PRINT("Last setpoint: y disposition/mode %f/%f/%d\n", last_setpoint.position.y, last_setpoint.velocity.y, last_setpoint.mode.y);
+  // DEBUG_PRINT("Last setpoint: z disposition/mode %f/%f/%d\n", last_setpoint.position.z, last_setpoint.velocity.z, last_setpoint.mode.z);
 }
 
 static inline void every_10000ms(){
   DEBUG_PRINT("control invocation interval %f\n", (double)control_invocation_interval);
+  // get_action_history();
 }
 
 static inline void trigger_every(uint64_t controller_tick){
   if(controller_tick > 3000){
+    if(controller_tick % 100 == 0){
+      every_100ms();
+    }
     if(controller_tick % 500 == 0){
       every_500ms();
     }
@@ -364,6 +398,9 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
   if(!prev_pre_set_motors && pre_set_motors){
     timestamp_pre_set_motors = now;
   }
+  if(prev_pre_set_motors && !pre_set_motors){
+    DEBUG_PRINT("Controller activation timeout: %f\n", (double)(now - timestamp_pre_set_motors)/1000);
+  }
   set_motors = pre_set_motors && (((now - timestamp_pre_set_motors) > WARMUP_TIME) || use_pre_set_warmup == 0);
 
   log_set_motors = set_motors ? 1 : 0;
@@ -380,6 +417,8 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
     controllerMellingerFirmwareInit();
     controllerINDIInit();
     // controllerMellingerFirmwareEnableIntegrators(MELLINGER_ENABLE_INTEGRATORS == 1);
+
+    rl_tools_reset();
     DEBUG_PRINT("Controller activated\n");
     switch(mode){
       case NORMAL:
@@ -401,6 +440,7 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
         DEBUG_PRINT("FIGURE_EIGHT mode\n");
         break;
     }
+    print_action_history();
   }
   if(prev_set_motors && !set_motors){
     DEBUG_PRINT("Controller deactivated\n");
@@ -537,7 +577,7 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
     }
     for(uint8_t i=0; i<4; i++){
       if (tick % (CONTROL_INTERVAL_MS * 1000) == 0){
-        DEBUG_PRINT("action_output[%d]: %f\n", i, action_output[i]);
+        // DEBUG_PRINT("action_output[%d]: %f\n", i, action_output[i]);
       }
       float a_pp = (action_output[i] + 1)/2;
       float des_rpm = (MAX_RPM - MIN_RPM) * a_pp + MIN_RPM;

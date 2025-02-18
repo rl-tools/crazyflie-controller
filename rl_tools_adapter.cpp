@@ -69,19 +69,73 @@ static inline void observe_rotation_matrix(const rlt::Matrix<STATE_SPEC>& state,
     rlt::set(observation, 0, 15 + 2, rlt::get(state, 0, 3 + 4 + 3 + 2));
 }
 
+
+float initial_action_history[ACTION_HISTORY_LENGTH * 4] = {
+    0.534168, 0.753254, 0.679295, 0.566427,
+    0.525874, 0.705253, 0.656214, 0.536570,
+    0.509544, 0.631993, 0.622092, 0.518709,
+    0.479339, 0.594646, 0.574077, 0.488329,
+    0.467668, 0.550967, 0.534308, 0.461902,
+    0.501032, 0.537674, 0.534984, 0.444490,
+    0.484434, 0.523343, 0.511477, 0.440881,
+    0.466697, 0.515734, 0.477060, 0.427198,
+    0.456693, 0.520798, 0.483239, 0.406194,
+    0.458536, 0.513311, 0.486682, 0.411296,
+    0.470246, 0.502109, 0.502606, 0.425196,
+    0.478923, 0.527158, 0.538335, 0.413386,
+    0.508725, 0.547810, 0.524096, 0.449614,
+    0.523691, 0.583428, 0.534506, 0.450721,
+    0.538574, 0.606051, 0.555090, 0.472940,
+    0.594967, 0.647030, 0.600723, 0.511770,
+    0.617710, 0.677829, 0.674206, 0.548999,
+    0.655617, 0.699371, 0.689245, 0.601265,
+    0.674869, 0.738577, 0.706874, 0.620181,
+    0.695772, 0.779213, 0.740092, 0.633573,
+    0.728900, 0.803292, 0.758678, 0.656767,
+    0.747148, 0.806910, 0.784897, 0.675173,
+    0.757184, 0.817050, 0.796299, 0.688959,
+    0.769723, 0.828030, 0.794401, 0.694537,
+    0.766441, 0.851696, 0.800805, 0.681653,
+    0.763995, 0.856067, 0.804973, 0.689815,
+    0.773082, 0.858971, 0.805811, 0.707282,
+    0.761463, 0.853014, 0.801310, 0.690995,
+    0.738443, 0.837900, 0.804454, 0.696833,
+    0.710002, 0.832731, 0.781812, 0.677180,
+    0.665900, 0.829816, 0.753890, 0.659695,
+    0.650035, 0.805208, 0.743301, 0.637346
+};
+
+void rl_tools_reset(){
+#ifdef RL_TOOLS_ACTION_HISTORY
+    constexpr T HOVERING_THROTTLE = 0.76;
+    for(TI step_i = 0; step_i < ACTION_HISTORY_LENGTH; step_i++){
+        for(TI action_i = 0; action_i < ACTOR_TYPE::SPEC::OUTPUT_DIM; action_i++){
+            // action_history[step_i][action_i] = HOVERING_THROTTLE;
+            action_history[step_i][action_i] = initial_action_history[step_i * ACTOR_TYPE::SPEC::OUTPUT_DIM + action_i] * 0.8;
+        }
+    }
+#endif
+    controller_tick = 0;
+}
+
+bool rl_tools_get_action_history(float* output, int length){
+    if(length != ACTION_HISTORY_LENGTH * ACTOR_TYPE::SPEC::OUTPUT_DIM){
+        return false;
+    }
+    for(TI step_i = 0; step_i < ACTION_HISTORY_LENGTH; step_i++){
+        for(TI action_i = 0; action_i < ACTOR_TYPE::SPEC::OUTPUT_DIM; action_i++){
+            *(output + step_i * ACTOR_TYPE::SPEC::OUTPUT_DIM + action_i) = action_history[step_i][action_i];
+        }
+    }
+    return true;
+}
+
 // Main functions (possibly with side effects)
 void rl_tools_init(){
     rlt::malloc(device, buffers);
     rlt::malloc(device, input);
     rlt::malloc(device, output);
-#ifdef RL_TOOLS_ACTION_HISTORY
-    for(TI step_i = 0; step_i < ACTION_HISTORY_LENGTH; step_i++){
-        for(TI action_i = 0; action_i < ACTOR_TYPE::SPEC::OUTPUT_DIM; action_i++){
-            action_history[step_i][action_i] = 0;
-        }
-    }
-#endif
-    controller_tick = 0;
+    rl_tools_reset();
 }
 
 char* rl_tools_get_checkpoint_name(){
