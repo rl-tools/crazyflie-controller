@@ -26,6 +26,8 @@
 #define MAX_RPM 21702.1
 #define WAYPOINT_NAVIGATION_NUMBER_OF_POINTS (5)
 #define WARMUP_TIME (1000 * 500)
+#define DWT_CYCCNT  (*((volatile uint32_t*)0xE0001004))
+
 typedef enum ControllerState{
   STATE_RESET,
   STATE_FORWARD,
@@ -198,6 +200,10 @@ void rl_tools_controller_packet_received(){
 
 
 void controllerOutOfTreeInit(void){
+  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+  DWT->CYCCNT = 0;
+  DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+
   controller_state = STATE_RESET;
   controller_tick = 0;
   motor_cmd_divider = 1.0;
@@ -344,6 +350,55 @@ static void print_mode(stab_mode_t mode){
       DEBUG_PRINT("modeVelocity\n");
       break;
   }
+}
+
+float compute_mac_flops(int N, float init_val) {
+  // Initialize multiplicands with runtime-dependent values
+  float b1 = init_val - 1.0f;
+  float b2 = init_val - 2.0f;
+  float b3 = init_val - 3.0f;
+  float b4 = init_val - 4.0f;
+  float b5 = init_val - 5.0f;
+  float b6 = init_val - 6.0f;
+  float b7 = init_val - 7.0f;
+  float b8 = init_val - 8.0f;
+  float b9 = init_val - 9.0f;
+  float b10 = init_val - 10.0f;
+  float b11 = init_val - 11.0f;
+  float b12 = init_val - 12.0f;
+
+  // Initialize accumulators
+  float accum1 = init_val;
+  float accum2 = init_val;
+  float accum3 = init_val;
+  float accum4 = init_val;
+  float accum5 = init_val;
+  float accum6 = init_val;
+  float accum7 = init_val;
+  float accum8 = init_val;
+  float accum9 = init_val;
+  float accum10 = init_val;
+  float accum11 = init_val;
+  float accum12 = init_val;
+
+  // The MAC loop
+  for (int i = 0; i < N; i++) {
+      accum1 += accum7 * b1;
+      accum2 += accum8 * b2;
+      accum3 += accum9 * b3;
+      accum4 += accum10 * b4;
+      accum5 += accum11 * b5;
+      accum6 += accum12 * b6;
+      accum7 += accum1 * b7;
+      accum8 += accum2 * b8;
+      accum9 += accum3 * b9;
+      accum10 += accum4 * b10;
+      accum11 += accum5 * b11;
+      accum12 += accum6 * b12;
+  }
+
+  float total = accum1 + accum2 + accum3 + accum4 + accum5 + accum6 + accum7 + accum8 + accum9 + accum10 + accum11 + accum12;
+  return total;
 }
 
 void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorData_t *sensors, const state_t *state, const uint32_t tick) {
@@ -521,13 +576,17 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
     update_state(sensors, state);
     {
       int64_t before = usecTimestamp();
+      uint32_t start_cycle = DWT->CYCCNT;
       if(use_orig_controller == 0){
         // if (tick % (CONTROL_INTERVAL_MS * 1000) == 0){
         //   for(uint8_t i=0; i<13; i++){
         //     DEBUG_PRINT("state_input[%d]: %f\n", i, state_input[i]);
         //   }
         // }
-        rl_tools_control(state_input, action_output);
+        // rl_tools_control(state_input, action_output);
+
+        volatile float acc_result = compute_mac_flops(1000, 13);
+
       }
       else{
         action_output[0] = -0.8;
@@ -535,9 +594,11 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
         action_output[2] = -0.8;
         action_output[3] = -0.8;
       }
+      uint32_t end_cycle = DWT->CYCCNT;
+      uint32_t cycles = end_cycle - start_cycle;
       int64_t after = usecTimestamp();
-      if (tick % (CONTROL_INTERVAL_MS * 10000) == 0){
-        DEBUG_PRINT("rl_tools_control took %lldus\n", after - before);
+      if (tick % (CONTROL_INTERVAL_MS * 1000) == 0){
+        DEBUG_PRINT("rl_tools_control took %lu cycles (%lldus)\n", cycles, after - before);
       }
     }
     for(uint8_t i=0; i<4; i++){
