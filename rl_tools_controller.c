@@ -352,61 +352,63 @@ static void print_mode(stab_mode_t mode){
   }
 }
 
- float compute_mac_flops(int N, float init_val) {
-  float b1 = init_val - 1.0f;
-  float b2 = init_val - 2.0f;
-  float b3 = init_val - 3.0f;
-  float b4 = init_val - 4.0f;
-  float b5 = init_val - 5.0f;
-  float b6 = init_val - 6.0f;
-  float b7 = init_val - 7.0f;
-  float b8 = init_val - 8.0f;
-  float b9 = init_val - 9.0f;
-  float b10 = init_val - 10.0f;
-  float b11 = init_val - 11.0f;
-  float b12 = init_val - 12.0f;
-  float b13 = init_val - 13.0f;
-  float b14 = init_val - 14.0f;
-  float b15 = init_val - 15.0f;
-  float b16 = init_val - 16.0f;
+float data[1000];
 
-  float accum1 = init_val;
-  float accum2 = init_val;
-  float accum3 = init_val;
-  float accum4 = init_val;
-  float accum5 = init_val;
-  float accum6 = init_val;
-  float accum7 = init_val;
-  float accum8 = init_val;
-  float accum9 = init_val;
-  float accum10 = init_val;
-  float accum11 = init_val;
-  float accum12 = init_val;
-  float accum13 = init_val;
-  float accum14 = init_val;
-  float accum15 = init_val;
-  float accum16 = init_val;
+ float compute_mac_flops(int N, float* data){
+  float b1  = 11.0f;
+  float b2  = 12.0f;
+  float b3  = 13.0f;
+  float b4  = 14.0f;
+  float b5  = 15.0f;
+  float b6  = 16.0f;
+  float b7  = 17.0f;
+  float b8  = 18.0f;
+  float b9  = 19.0f;
+  float b10 = 110.0f;
+  float b11 = 111.0f;
+  float b12 = 112.0f;
+  float b13 = 113.0f;
+  float b14 = 114.0f;
+  float b15 = 115.0f;
+  float b16 = 116.0f;
 
-  for (int i = 0; i < N; i++) {
-      accum1 += accum9 * b1;
-      accum2 += accum10 * b2;
-      accum3 += accum11 * b3;
-      accum4 += accum12 * b4;
-      accum5 += accum13 * b5;
-      accum6 += accum14 * b6;
-      accum7 += accum15 * b7;
-      accum8 += accum16 * b8;
-      accum9 += accum1 * b9;
-      accum10 += accum2 * b10;
-      accum11 += accum3 * b11;
-      accum12 += accum4 * b12;
-      accum13 += accum5 * b13;
-      accum14 += accum6 * b14;
-      accum15 += accum7 * b15;
-      accum16 += accum8 * b16;
+  float accum1  = 0;
+  float accum2  = 0;
+  float accum3  = 0;
+  float accum4  = 0;
+  float accum5  = 0;
+  float accum6  = 0;
+  float accum7  = 0;
+  float accum8  = 0;
+  float accum9  = 0;
+  float accum10 = 0;
+  float accum11 = 0;
+  float accum12 = 0;
+  float accum13 = 0;
+  float accum14 = 0;
+  float accum15 = 0;
+  float accum16 = 0;
+
+  for (int i = 0; i < N; i+=16) {
+      accum1  += b1  * data[i + 0 ];
+      accum2  += b2  * data[i + 1 ];
+      accum3  += b3  * data[i + 2 ];
+      accum4  += b4  * data[i + 3 ];
+      accum5  += b5  * data[i + 4 ];
+      accum6  += b6  * data[i + 5 ];
+      accum7  += b7  * data[i + 6 ];
+      accum8  += b8  * data[i + 7 ];
+      accum9  += b9  * data[i + 8 ];
+      accum10 += b10 * data[i + 9 ];
+      accum11 += b11 * data[i + 10];
+      accum12 += b12 * data[i + 11];
+      accum13 += b13 * data[i + 12];
+      accum14 += b14 * data[i + 13];
+      accum15 += b15 * data[i + 14];
+      accum16 += b16 * data[i + 15];
   }
 
-  float total = accum1 + accum2 + accum3 + accum4 + accum5 + accum6 + accum7 + accum8 + accum9 + accum10 + accum11 + accum12;
+  float total = accum1 + accum2 + accum3 + accum4 + accum5 + accum6 + accum7 + accum8 + accum9 + accum10 + accum11 + accum12 + accum13 + accum14 + accum15 + accum16;
   return total;
 }
 
@@ -592,9 +594,9 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
         //     DEBUG_PRINT("state_input[%d]: %f\n", i, state_input[i]);
         //   }
         // }
-        // rl_tools_control(state_input, action_output);
+        rl_tools_control(state_input, action_output);
 
-        volatile float acc_result = compute_mac_flops(1000, 13);
+        // volatile float acc_result = compute_mac_flops(1000, data);
 
       }
       else{
