@@ -583,9 +583,9 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
         //     DEBUG_PRINT("state_input[%d]: %f\n", i, state_input[i]);
         //   }
         // }
-        // rl_tools_control(state_input, action_output);
+        rl_tools_control(state_input, action_output);
 
-        volatile float acc_result = compute_mac_flops(1000, 13);
+        // volatile float acc_result = compute_mac_flops(1000, 13);
 
       }
       else{
