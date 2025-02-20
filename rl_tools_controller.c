@@ -265,7 +265,7 @@ void controllerOutOfTreeInit(void){
   controllerBrescianiniInit();
   rl_tools_init();
 
-  DEBUG_PRINT("BackpropTools controller init! Checkpoint: %s\n", rl_tools_get_checkpoint_name());
+  DEBUG_PRINT("RLtools controller init! Checkpoint: %s\n", rl_tools_get_checkpoint_name());
 }
 
 bool controllerOutOfTreeTest(void)
@@ -275,9 +275,9 @@ bool controllerOutOfTreeTest(void)
   if(absdiff < 0){
     absdiff = -absdiff;
   }
-  DEBUG_PRINT("BackpropTools controller test, abs diff: %f\n", absdiff);
+  DEBUG_PRINT("RLtools controller test, abs diff: %f\n", absdiff);
   for(int i = 0; i < 4; i++){
-    DEBUG_PRINT("BackpropTools controller: Test action %d: %f\n", i, output[i]);
+    DEBUG_PRINT("RLtools controller: Test action %d: %f\n", i, output[i]);
   }
   if(absdiff > 0.2){
     return false;
@@ -446,6 +446,7 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
     controllerMellingerFirmwareInit();
     controllerINDIInit();
     // controllerMellingerFirmwareEnableIntegrators(MELLINGER_ENABLE_INTEGRATORS == 1);
+    rl_tools_reset();
     DEBUG_PRINT("Controller activated\n");
     switch(mode){
       case NORMAL:

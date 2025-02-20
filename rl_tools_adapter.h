@@ -5,6 +5,10 @@ void rl_tools_init();
 #ifdef __cplusplus
 extern "C"
 #endif
+void rl_tools_reset();
+#ifdef __cplusplus
+extern "C"
+#endif
 float rl_tools_test(float*);
 #ifdef __cplusplus
 extern "C"

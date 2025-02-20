@@ -84,10 +84,7 @@ static inline void observe_rotation_matrix(const rlt::Matrix<STATE_SPEC>& state,
 }
 
 // Main functions (possibly with side effects)
-void rl_tools_init(){
-    // rlt::malloc(device, buffers);
-    // rlt::malloc(device, input);
-    // rlt::malloc(device, output);
+void rl_tools_reset(){
 #ifdef RL_TOOLS_ACTION_HISTORY
     constexpr T HOVERING_THROTTLE = 0.66;
     for(TI step_i = 0; step_i < ACTION_HISTORY_LENGTH; step_i++){
@@ -96,6 +93,12 @@ void rl_tools_init(){
         }
     }
 #endif
+}
+void rl_tools_init(){
+    // rlt::malloc(device, buffers);
+    // rlt::malloc(device, input);
+    // rlt::malloc(device, output);
+    rl_tools_reset();
     controller_tick = 0;
 }
 
