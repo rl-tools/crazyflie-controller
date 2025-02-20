@@ -352,8 +352,7 @@ static void print_mode(stab_mode_t mode){
   }
 }
 
-float compute_mac_flops(int N, float init_val) {
-  // Initialize multiplicands with runtime-dependent values
+ float compute_mac_flops(int N, float init_val) {
   float b1 = init_val - 1.0f;
   float b2 = init_val - 2.0f;
   float b3 = init_val - 3.0f;
@@ -366,8 +365,11 @@ float compute_mac_flops(int N, float init_val) {
   float b10 = init_val - 10.0f;
   float b11 = init_val - 11.0f;
   float b12 = init_val - 12.0f;
+  float b13 = init_val - 13.0f;
+  float b14 = init_val - 14.0f;
+  float b15 = init_val - 15.0f;
+  float b16 = init_val - 16.0f;
 
-  // Initialize accumulators
   float accum1 = init_val;
   float accum2 = init_val;
   float accum3 = init_val;
@@ -380,21 +382,28 @@ float compute_mac_flops(int N, float init_val) {
   float accum10 = init_val;
   float accum11 = init_val;
   float accum12 = init_val;
+  float accum13 = init_val;
+  float accum14 = init_val;
+  float accum15 = init_val;
+  float accum16 = init_val;
 
-  // The MAC loop
   for (int i = 0; i < N; i++) {
-      accum1 += accum7 * b1;
-      accum2 += accum8 * b2;
-      accum3 += accum9 * b3;
-      accum4 += accum10 * b4;
-      accum5 += accum11 * b5;
-      accum6 += accum12 * b6;
-      accum7 += accum1 * b7;
-      accum8 += accum2 * b8;
-      accum9 += accum3 * b9;
-      accum10 += accum4 * b10;
-      accum11 += accum5 * b11;
-      accum12 += accum6 * b12;
+      accum1 += accum9 * b1;
+      accum2 += accum10 * b2;
+      accum3 += accum11 * b3;
+      accum4 += accum12 * b4;
+      accum5 += accum13 * b5;
+      accum6 += accum14 * b6;
+      accum7 += accum15 * b7;
+      accum8 += accum16 * b8;
+      accum9 += accum1 * b9;
+      accum10 += accum2 * b10;
+      accum11 += accum3 * b11;
+      accum12 += accum4 * b12;
+      accum13 += accum5 * b13;
+      accum14 += accum6 * b14;
+      accum15 += accum7 * b15;
+      accum16 += accum8 * b16;
   }
 
   float total = accum1 + accum2 + accum3 + accum4 + accum5 + accum6 + accum7 + accum8 + accum9 + accum10 + accum11 + accum12;
@@ -583,9 +592,9 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
         //     DEBUG_PRINT("state_input[%d]: %f\n", i, state_input[i]);
         //   }
         // }
-        rl_tools_control(state_input, action_output);
+        // rl_tools_control(state_input, action_output);
 
-        // volatile float acc_result = compute_mac_flops(1000, 13);
+        volatile float acc_result = compute_mac_flops(1000, 13);
 
       }
       else{
