@@ -36,7 +36,7 @@ constexpr TI ACTION_HISTORY_LENGTH = 16; //rlt::checkpoint::environment::ACTION_
 static constexpr TI INPUT_DIM = rlt::get_last(ACTOR_TYPE::INPUT_SHAPE{});
 static constexpr TI OUTPUT_DIM = rlt::get_last(ACTOR_TYPE::OUTPUT_SHAPE{});
 static_assert(OUTPUT_DIM == 4);
-static_assert(INPUT_DIM == (18 + ACTION_HISTORY_LENGTH * OUTPUT_DIM + 1));
+static_assert(INPUT_DIM == (18 + ACTION_HISTORY_LENGTH * OUTPUT_DIM));
 #else
 static_assert(ACTOR_TYPE::SPEC::INPUT_DIM == 18);
 #endif
@@ -137,8 +137,6 @@ void rl_tools_control(float* state, float* actions){
         }
     }
 #endif
-    auto parameter_mass_observation = rlt::view(device, input, rlt::matrix::ViewSpec<1, 1>{}, 0, 18 + ACTION_HISTORY_LENGTH * OUTPUT_DIM);
-	rlt::set(parameter_mass_observation, 0, 0, (T)0.027);
     rlt::Matrix<rlt::matrix::Specification<T, TI, 1, OUTPUT_DIM, true, rlt::matrix::layouts::RowMajorAlignment<TI, 1>>> output = {(T*)actions};
     auto input_tensor = rlt::to_tensor(device, input);
     auto input_tensor_unsqueezed = rlt::unsqueeze(device, input_tensor);
