@@ -149,7 +149,7 @@ void rl_tools_control(float* state, float* actions){
     if(substep == 0){
         static_assert(ACTION_HISTORY_LENGTH >= 1);
         for(TI step_i = ACTION_HISTORY_LENGTH-1; step_i > 0; step_i--){
-            for(TI action_i = OUTPUT_DIM-1; action_i < OUTPUT_DIM; action_i++){
+            for(TI action_i = 0; action_i < OUTPUT_DIM; action_i++){
                 action_history[step_i][action_i] = action_history[step_i-1][action_i];
             }
         }
