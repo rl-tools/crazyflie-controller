@@ -63,6 +63,8 @@ static float pos_error[3] = {0, 0, 0};
 static float relative_pos[3] = {0, 0, 0};
 static float origin[3] = {0, 0, 0};
 
+static float waypoint_navigation_target_vel = 0.0;
+
 static float pos_distance_limit_position;
 static float vel_distance_limit_position;
 static float pos_distance_limit_figure_eight;
@@ -232,6 +234,8 @@ void controllerOutOfTreeInit(void){
   relative_pos[1] = 0;
   relative_pos[2] = 0;
   log_set_motors = 0;
+  
+  waypoint_navigation_target_vel = 0.0;
 
   pos_distance_limit_position = 0.5f;
   vel_distance_limit_position = 2.0f;
@@ -485,9 +489,9 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
       break;
     case WAYPOINT_NAVIGATION_DYNAMIC:
       {
-        float x = relative_pos[0] - trajectory[waypoint_navigation_dynamic_current_waypoint][0];
-        float y = relative_pos[1] - trajectory[waypoint_navigation_dynamic_current_waypoint][1];
-        float z = relative_pos[2] - trajectory[waypoint_navigation_dynamic_current_waypoint][2];
+        float x = trajectory[waypoint_navigation_dynamic_current_waypoint][0] - relative_pos[0];
+        float y = trajectory[waypoint_navigation_dynamic_current_waypoint][1] - relative_pos[1];
+        float z = trajectory[waypoint_navigation_dynamic_current_waypoint][2] - relative_pos[2];
 
         float current_dist = sqrtf(x*x + y*y + z*z);
         if(current_dist < waypoint_navigation_dynamic_threshold){
@@ -497,6 +501,9 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
         target_pos[0] = origin[0] + trajectory[waypoint_navigation_dynamic_current_waypoint][0];
         target_pos[1] = origin[1] + trajectory[waypoint_navigation_dynamic_current_waypoint][1];
         target_pos[2] = origin[2] + trajectory[waypoint_navigation_dynamic_current_waypoint][2];
+        target_vel[0] = x / current_dist * waypoint_navigation_target_vel;
+        target_vel[1] = y / current_dist * waypoint_navigation_target_vel;
+        target_vel[2] = z / current_dist * waypoint_navigation_target_vel;
       }
       break;
     case FIGURE_EIGHT:
@@ -671,6 +678,7 @@ PARAM_ADD(PARAM_UINT8, ht, &hand_test)
 PARAM_ADD(PARAM_UINT8, wn, &mode)
 PARAM_ADD(PARAM_FLOAT, ts, &waypoint_navigation_trajectory_scale)
 PARAM_ADD(PARAM_FLOAT, wpt, &waypoint_navigation_dynamic_threshold)
+PARAM_ADD(PARAM_FLOAT, wntv, &waypoint_navigation_target_vel)
 PARAM_ADD(PARAM_FLOAT, wni, &waypoint_navigation_point_duration)
 PARAM_ADD(PARAM_FLOAT, fewt, &figure_eight_warmup_time)
 PARAM_ADD(PARAM_FLOAT, fei,  &figure_eight_interval)
