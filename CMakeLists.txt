@@ -1,0 +1,6 @@
+project(crazyflie_controller_test)
+
+
+add_executable(crazyflie_controller_test rl_tools_adapter_test.cpp rl_tools_adapter_new.cpp)
+target_include_directories(crazyflie_controller_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/external/rl_tools/include)
+target_compile_definitions(crazyflie_controller_test PRIVATE RL_TOOLS_ENABLE_INFORMATIVE_STATUS_MESSAGES)

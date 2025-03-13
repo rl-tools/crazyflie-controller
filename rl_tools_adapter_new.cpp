@@ -11,6 +11,10 @@
 
 #include "data/actor.h"
 
+#ifdef RL_TOOLS_ENABLE_INFORMATIVE_STATUS_MESSAGES
+#include <cstdio>
+#endif
+
 namespace rlt = rl_tools;
 
 using DEV_SPEC = rlt::devices::DefaultARMSpecification;
@@ -28,6 +32,7 @@ static constexpr TI INPUT_DIM = rlt::get_last(ACTOR_TYPE::INPUT_SHAPE{});
 static constexpr TI OUTPUT_DIM = rlt::get_last(ACTOR_TYPE::OUTPUT_SHAPE{});
 static_assert(OUTPUT_DIM == 4);
 static_assert(INPUT_DIM == (18 + ACTION_HISTORY_LENGTH * OUTPUT_DIM));
+constexpr TI TIMING_STATS_NUM_STEPS = 100;
 
 struct State{
     float position[3];
@@ -35,9 +40,13 @@ struct State{
     float linear_velocity[3];
     float angular_velocity[3];
     T action_history[ACTION_HISTORY_LENGTH][OUTPUT_DIM];
-    uint64_t last_observation_timestamp, last_control_timestamp;
-    bool last_observation_timestamp_set, last_control_timestamp_set;
+    uint64_t last_observation_timestamp, last_control_timestamp, last_control_timestamp_original; // last_control_timestamp runs at the higher rate, while last_control_timestamp_original runs at the original control rate of the simulation
+    bool last_observation_timestamp_set, last_control_timestamp_set, last_control_timestamp_original_set;
     typename ACTOR_TYPE::State<false> policy_state;
+    uint64_t control_dt[TIMING_STATS_NUM_STEPS];
+    uint64_t control_dt_index = 0;
+    uint64_t control_original_dt[TIMING_STATS_NUM_STEPS];
+    uint64_t control_original_dt_index = 0;
 };
 
 
@@ -100,26 +109,88 @@ void rl_tools_reset(){
     rlt::reset(device, rlt::checkpoint::actor::module, state.policy_state, rng);
     state.last_observation_timestamp_set = false;
     state.last_control_timestamp_set = false;
+    state.last_control_timestamp_original_set = false;
+    state.control_dt_index = 0;
+    state.control_original_dt_index = 0;
 }
 void rl_tools_init(){
     rl_tools_reset();
 }
 
-char* rl_tools_get_checkpoint_name(){
-    return (char*)rlt::checkpoint::meta::name;
+char *portable_strcpy(char *dest, const char *src) {
+    char *original_dest = dest;
+    while ((*dest++ = *src++) != '\0');
+    return original_dest;
 }
 
-char* rl_tools_get_status_name(RLtoolsStatus status){
-    switch(status){
-        case RL_TOOLS_STATUS_OK:
-            return "OK";
-        case RL_TOOLS_STATUS_CONTROL:
-            return "RL_TOOLS_STATUS_CONTROL";
-        case RL_TOOLS_STATUS_TIMESTAMP_INVALID:
-            return "Timestamp invalid";
-        default:
-            return "Unknown status";
+const char* rl_tools_get_checkpoint_name(){
+    return (char*)rlt::checkpoint::meta::name;
+}
+char status_message[256] = "";
+void append(const char* message, uint32_t &position){
+    if(position + strlen(message) < sizeof(status_message)){
+        portable_strcpy(status_message + position, message);
+        position += strlen(message);
     }
+}
+char* rl_tools_get_status_message(RLtoolsStatus status){
+    uint32_t position = 0;
+    if(rl_tools_healthy(status)){
+        append("OK", position);
+        if(status & RL_TOOLS_STATUS_BIT_SOURCE_CONTROL){
+            append(" CONTROL", position);
+        }
+        if(status & RL_TOOLS_STATUS_BIT_SOURCE_CONTROL_ORIGINAL){
+            append("_ORIGINAL", position);
+        }
+    }
+    else{
+        append("PROBLEM", position);
+        if(status & RL_TOOLS_STATUS_BIT_SOURCE_CONTROL){
+            append(" CONTROL", position);
+            if(status & RL_TOOLS_STATUS_BIT_SOURCE_CONTROL_ORIGINAL){
+                append("_ORIGINAL", position);
+            }
+        }
+        else{
+            append(" UNKNOWN", position);
+        }
+        if(status & RL_TOOLS_STATUS_BIT_TIMESTAMP_INVALID){
+            append(" TIMESTAMP_INVALID", position);
+        }
+        else{
+            if(status & RL_TOOLS_STATUS_BIT_TIMING_ISSUE){
+                append(" TIMING_ISSUE", position);
+                if(status & RL_TOOLS_STATUS_BIT_TIMING_JITTER){
+                    append(" JITTER", position);
+                }
+                if(status & RL_TOOLS_STATUS_BIT_TIMING_BIAS){
+                    append(" BIAS", position);
+                }
+                if((status & RL_TOOLS_STATUS_BITS_MAGNITUDE) != 0){
+                    T magnitude = (T)(int16_t)((status & RL_TOOLS_STATUS_BITS_MAGNITUDE) >> RL_TOOLS_STATUS_BITS_MAGNITUDE_SHIFT);
+                    append(" MAGNITUDE: ", position);
+#ifdef RL_TOOLS_ENABLE_INFORMATIVE_STATUS_MESSAGES
+                    char buffer[50];
+                    snprintf(buffer, 50, "%.2f%%", magnitude);
+                    append(buffer, position);
+#else
+                    if(magnitude > 0){
+                        append("HIGH", position);
+                    }
+                    else{
+                        append("LOW", position);
+                    }
+#endif
+                }
+            }
+            else{
+                append(" UNKNOWN", position);
+            }
+        }
+
+    }
+    return status_message;
 }
 
 float rl_tools_test(RLtoolsAction* output){
@@ -141,8 +212,59 @@ float rl_tools_test(RLtoolsAction* output){
 #endif
 }
 
+T clip(T value, T min, T max){
+    if(value < min){
+        return min;
+    }
+    if(value > max){
+        return max;
+    }
+    return value;
+}
+
+RLtoolsStatus timing_jitter_status(bool original){
+    if((original ? state.control_original_dt_index : state.control_dt_index) < TIMING_STATS_NUM_STEPS){
+        return 0;
+    }
+    for(TI i = 0; i < TIMING_STATS_NUM_STEPS; i++){
+        auto value = original ? state.control_original_dt[i] : state.control_dt[i];
+        auto expected = original ? CONTROL_INTERVAL_US_ORIGINAL : CONTROL_INTERVAL_US;
+        if(value > expected * (RL_TOOLS_STATUS_TIMING_JITTER_HIGH_THRESHOLD) || value < expected * (RL_TOOLS_STATUS_TIMING_JITTER_LOW_THRESHOLD)){
+            T magnitude = (value / (float)expected - 1) * 100;
+            magnitude = clip(magnitude, INT16_MIN, INT16_MAX);
+            uint64_t magnitude_bit = (uint16_t)((int16_t)(magnitude));
+            return RL_TOOLS_STATUS_BIT_TIMING_ISSUE | RL_TOOLS_STATUS_BIT_TIMING_JITTER | (magnitude_bit << RL_TOOLS_STATUS_BITS_MAGNITUDE_SHIFT);
+        }
+    }
+    return 0;
+}
+
+bool rl_tools_healthy(RLtoolsStatus status){
+    return (status & RL_TOOLS_STATUS_BITS_ISSUE) == 0;
+}
+
+RLtoolsStatus timing_bias_status(bool original){
+    if((original ? state.control_original_dt_index : state.control_dt_index) < TIMING_STATS_NUM_STEPS){
+        return 0;
+    }
+    T value = 0;
+    for(TI i = 0; i < TIMING_STATS_NUM_STEPS; i++){
+        value += original ? state.control_original_dt[i] : state.control_dt[i];
+    }
+    value /= TIMING_STATS_NUM_STEPS;
+
+    auto expected = original ? CONTROL_INTERVAL_US_ORIGINAL : CONTROL_INTERVAL_US;
+    if(value > expected * RL_TOOLS_STATUS_TIMING_BIAS_HIGH_THRESHOLD || value < expected * RL_TOOLS_STATUS_TIMING_BIAS_LOW_THRESHOLD){
+        T magnitude = (value / (float)expected - 1) * 100;
+        magnitude = clip(magnitude, INT16_MIN, INT16_MAX);
+        uint64_t magnitude_bit = (uint16_t)((int16_t)(magnitude));
+        return RL_TOOLS_STATUS_BIT_TIMING_ISSUE | RL_TOOLS_STATUS_BIT_TIMING_BIAS | (magnitude_bit << RL_TOOLS_STATUS_BITS_MAGNITUDE_SHIFT);
+    }
+    return 0;
+}
+
 RLtoolsStatus rl_tools_control(uint64_t microseconds, RLtoolsObservation* observation, RLtoolsAction* action){
-    bool reset = true;
+    bool reset = false;
     if(!state.last_observation_timestamp_set){
         state.last_observation_timestamp = microseconds;
         state.last_observation_timestamp_set = true;
@@ -155,12 +277,12 @@ RLtoolsStatus rl_tools_control(uint64_t microseconds, RLtoolsObservation* observ
     if(microseconds < state.last_observation_timestamp){
         state.last_observation_timestamp = microseconds;
         state.last_observation_timestamp_set = true;
-        return RL_TOOLS_STATUS_TIMESTAMP_INVALID;
+        return RL_TOOLS_STATUS_BIT_TIMESTAMP_INVALID;
     }
     if(microseconds < state.last_control_timestamp){
         state.last_control_timestamp = microseconds;
         state.last_control_timestamp_set = true;
-        return RL_TOOLS_STATUS_TIMESTAMP_INVALID;
+        return RL_TOOLS_STATUS_BIT_TIMESTAMP_INVALID;
     }
 
     uint64_t time_diff_obs = microseconds - state.last_observation_timestamp;
@@ -202,64 +324,40 @@ RLtoolsStatus rl_tools_control(uint64_t microseconds, RLtoolsObservation* observ
     }
     RLtoolsStatus status = RL_TOOLS_STATUS_OK;
     if(time_diff_control >= CONTROL_INTERVAL_US || reset){
-        bool real_control_step = time_diff_control >= CONTROL_INTERVAL_US_ORIGINAL;
+        if(!reset){
+            state.control_dt[state.control_dt_index++ % TIMING_STATS_NUM_STEPS] = time_diff_control;
+        }
+        state.last_control_timestamp = microseconds;
+        if(!state.last_control_timestamp_original_set){
+            state.last_control_timestamp_original = microseconds;
+            state.last_control_timestamp_original_set = true;
+        }
+        uint64_t time_diff_control_original = microseconds - state.last_control_timestamp_original;
+        bool real_control_step = (time_diff_control_original >= CONTROL_INTERVAL_US_ORIGINAL) || reset;
         observe(device, state, input);
         rlt::Mode<rlt::mode::Evaluation<>> mode;
         if(real_control_step){
             rlt::evaluate_step(device, rlt::checkpoint::actor::module, input, state.policy_state, output, buffers, rng, mode);
+            state.last_control_timestamp_original = microseconds;
+            if(!reset){
+                state.control_original_dt[state.control_original_dt_index++ % TIMING_STATS_NUM_STEPS] = time_diff_control_original;
+            }
+            status = RL_TOOLS_STATUS_OK | RL_TOOLS_STATUS_BIT_SOURCE_CONTROL | RL_TOOLS_STATUS_BIT_SOURCE_CONTROL_ORIGINAL;
+            status |= timing_jitter_status(true);
+            if(rl_tools_healthy(status))
+            status |= timing_bias_status(true);
         }
         else{
             policy_state_buffer = state.policy_state;
             rlt::evaluate_step(device, rlt::checkpoint::actor::module, input, policy_state_buffer, output, buffers, rng, mode);
+            status = RL_TOOLS_STATUS_OK | RL_TOOLS_STATUS_BIT_SOURCE_CONTROL;
+            status |= timing_jitter_status(false);
+            if(rl_tools_healthy(status))
+            status |= timing_bias_status(true);
         }
-        status = RL_TOOLS_STATUS_CONTROL;
     }
     for(TI action_i=0; action_i < OUTPUT_DIM; action_i++){
         action->action[action_i] = rlt::get(device, output, 0, action_i);
     }
     return status;
 }
-
-#ifdef TEST_MAIN
-#include <iostream>
-int main(){
-    rl_tools_init();
-    RLtoolsAction action;
-    T test_result = rl_tools_test(&action);
-    std::cout << "test: " << test_result << std::endl;
-    for(TI i = 0; i < OUTPUT_DIM; i++){
-        std::cout << "action[" << i << "] = " << action.action[i] << std::endl;
-    }
-    uint64_t timestamp = 0;
-    RLtoolsObservation observation;
-    observation.position[0] = 0.0f;
-    observation.position[1] = 0.0f;
-    observation.position[2] = 0.0f;
-    observation.orientation[0] = 1.0f;
-    observation.orientation[1] = 0.0f;
-    observation.orientation[2] = 0.0f;
-    observation.orientation[3] = 0.0f;
-    observation.linear_velocity[0] = 0.0f;
-    observation.linear_velocity[1] = 0.0f;
-    observation.linear_velocity[2] = 0.0f;
-    observation.angular_velocity[0] = 0.0f;
-    observation.angular_velocity[1] = 0.0f;
-    observation.angular_velocity[2] = 0.0f;
-    for(TI j = 0; j < OUTPUT_DIM; j++){
-        observation.previous_action[j] = 0.0f;
-    }
-    RLtoolsStatus status;
-    status = rl_tools_control(timestamp, &observation, &action);
-    std::cout << "status: " << rl_tools_get_status_name(status) << std::endl;
-    for(TI i = 0; i < OUTPUT_DIM; i++){
-        std::cout << "action[" << i << "] = " << action.action[i] << std::endl;
-    }
-    timestamp += 1000;
-    status = rl_tools_control(timestamp, &observation, &action);
-    std::cout << "status: " << rl_tools_get_status_name(status) << std::endl;
-    for(TI i = 0; i < OUTPUT_DIM; i++){
-        std::cout << "action[" << i << "] = " << action.action[i] << std::endl;
-    }
-    return 0;
-}
-#endif

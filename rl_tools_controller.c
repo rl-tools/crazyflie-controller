@@ -280,8 +280,7 @@ void controllerOutOfTreeInit(void){
   DEBUG_PRINT("RLtools controller init! Checkpoint: %s\n", rl_tools_get_checkpoint_name());
 }
 
-bool controllerOutOfTreeTest(void)
-{
+bool controllerOutOfTreeTest(void){
   float output[4];
   float absdiff = rl_tools_test(output);
   if(absdiff < 0){
