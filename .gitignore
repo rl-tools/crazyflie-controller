@@ -10,3 +10,4 @@ ablation_checkpoints
 ablation_data*
 .venv
 *.out
+*.wasm

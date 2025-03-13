@@ -1,6 +1,6 @@
 #ifndef RL_TOOLS_ADAPTER_NEW_H
 #define RL_TOOLS_ADAPTER_NEW_H
-#ifdef __cplusplus
+#if defined(__cplusplus) && !defined(RL_TOOLS_WASM)
 #include <cstdint>
 #else
 #include <stdint.h>
@@ -48,7 +48,6 @@ extern "C" {
     RLtoolsStatus rl_tools_control(uint64_t microseconds, RLtoolsObservation* observation, RLtoolsAction* action);
     const char* rl_tools_get_checkpoint_name();
     char* rl_tools_get_status_message(RLtoolsStatus status);
-    float rl_tools_timing_get_bias(bool original);
 #ifdef __cplusplus
 }
 #endif

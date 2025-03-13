@@ -1,9 +1,17 @@
 #include "rl_tools_adapter_new.h"
 
+#ifndef RL_TOOLS_WASM
 #include <rl_tools/operations/arm.h>
+#else
+#include <rl_tools/operations/wasm32.h>
+#endif
 #include <rl_tools/nn/layers/standardize/operations_generic.h>
+
+#ifndef RL_TOOLS_WASM
 #include <rl_tools/nn/layers/dense/operations_arm/opt.h>
-// #include <rl_tools/nn/layers/dense/operations_generic.h>
+#else
+#include <rl_tools/nn/layers/dense/operations_generic.h>
+#endif
 #include <rl_tools/nn/layers/sample_and_squash/operations_generic.h>
 #include <rl_tools/nn/layers/gru/operations_generic.h>
 #include <rl_tools/nn_models/mlp/operations_generic.h>
@@ -17,8 +25,13 @@
 
 namespace rlt = rl_tools;
 
+#ifndef RL_TOOLS_WASM
 using DEV_SPEC = rlt::devices::DefaultARMSpecification;
 using DEVICE = rlt::devices::arm::OPT<DEV_SPEC>;
+#else
+using DEVICE = rlt::devices::DefaultWASM32;
+#endif
+
 using TI = typename DEVICE::index_t;
 static constexpr TI TEST_BATCH_SIZE = rlt::checkpoint::example::input::SHAPE::template GET<1>;
 using ACTOR_TYPE_ORIGINAL = rlt::checkpoint::actor::TYPE;
@@ -117,6 +130,14 @@ void rl_tools_init(){
     rl_tools_reset();
 }
 
+TI portable_strlen(const char* str) {
+    const char* ptr = str;
+    while (*ptr != '\0') {
+        ptr++;
+    }
+    return ptr - str;
+}
+
 char *portable_strcpy(char *dest, const char *src) {
     char *original_dest = dest;
     while ((*dest++ = *src++) != '\0');
@@ -128,9 +149,9 @@ const char* rl_tools_get_checkpoint_name(){
 }
 char status_message[256] = "";
 void append(const char* message, uint32_t &position){
-    if(position + strlen(message) < sizeof(status_message)){
+    if(position + portable_strlen(message) < sizeof(status_message)){
         portable_strcpy(status_message + position, message);
-        position += strlen(message);
+        position += portable_strlen(message);
     }
 }
 char* rl_tools_get_status_message(RLtoolsStatus status){
