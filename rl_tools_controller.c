@@ -11,7 +11,7 @@
 #include "controller_indi.h"
 #include "controller_brescianini.h"
 #include "power_distribution.h"
-#include "rl_tools_adapter.h"
+#include "rl_tools_adapter_new.h"
 #include "stabilizer_types.h"
 #include "pm.h"
 #include "task.h"
@@ -248,6 +248,11 @@ void controllerOutOfTreeInit(void){
   mellinger_enable_integrators = 1;
   velocity_cmd_multiplier = 1;
   velocity_cmd_p_term = 0.0;
+
+  action_output[0] = 0;
+  action_output[1] = 0;
+  action_output[2] = 0;
+  action_output[3] = 0;
 
   target_height = 0.0;
   target_height_figure_eight = 0.0;
@@ -534,23 +539,31 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
   prev_set_motors = set_motors;
   prev_pre_set_motors = pre_set_motors;
 
-  if(tick % CONTROL_INTERVAL_MS == 0){
     update_state(sensors, state);
     {
       int64_t before = usecTimestamp();
       uint32_t start_cycle = DWT->CYCCNT;
-      if(use_orig_controller == 0){
-        // if (tick % (CONTROL_INTERVAL_MS * 1000) == 0){
-        //   for(uint8_t i=0; i<13; i++){
-        //     DEBUG_PRINT("state_input[%d]: %f\n", i, state_input[i]);
-        //   }
-        // }
-        rl_tools_control(state_input, action_output);
-
-        // volatile float acc_result = compute_mac_flops(benchmark_data);
-
+      RLtoolsObservation observation;
+      for(uint8_t i=0; i<4; i++){
+        if(i <= 3){
+          observation.position[i] = state_input[i];
+          observation.linear_velocity[i] = state_input[3+4+i];
+          observation.angular_velocity[i] = state_input[3+4+3+i];
+        }
+        else{
+          observation.orientation[i] = state_input[3+i];
+          observation.previous_action[i] = action_output[i];
+        }
       }
-      else{
+      RLtoolsAction action;
+      RLtoolsStatus rlt_status = rl_tools_control(before, &observation, &action);
+      if(rlt_status != RL_TOOLS_STATUS_OK && rlt_status != RL_TOOLS_STATUS_CONTROL){
+        DEBUG_PRINT("RLtools controller status: %d\n", rlt_status);
+      }
+      for(uint8_t i=0; i<4; i++){
+        action_output[i] = action.action[i];
+      }
+      if(use_orig_controller != 0){
         action_output[0] = -0.8;
         action_output[1] = -0.8;
         action_output[2] = -0.8;
@@ -581,7 +594,6 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
       timestamp_last_behind_schedule_message = now;
     }
     timestamp_last_reset = usecTimestamp();
-  }
   if(!set_motors){
     if(pre_set_motors){
       for(uint8_t i=0; i<4; i++){

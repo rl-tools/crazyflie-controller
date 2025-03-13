@@ -5,21 +5,22 @@
 #endif
 
 
-struct RLtoolsObservation{
+typedef struct {
     float position[3];
     float orientation[4]; // Quaternion: w, x, y, z
     float linear_velocity[3];
     float angular_velocity[3];
     float previous_action[4];
-};
-struct RLtoolsAction{
+} RLtoolsObservation;
+typedef struct {
     float action[4];
-};
+} RLtoolsAction;
 
-enum RLtoolsStatus{
+typedef enum {
     RL_TOOLS_STATUS_OK = 0,
-    RL_TOOLS_STATUS_TIMESTAMP_INVALID = 1
-};
+    RL_TOOLS_STATUS_CONTROL = 1,
+    RL_TOOLS_STATUS_TIMESTAMP_INVALID = 1000
+} RLtoolsStatus;
 
 #ifdef __cplusplus
 extern "C" {
@@ -28,7 +29,7 @@ extern "C" {
     void rl_tools_reset();
     float rl_tools_test(RLtoolsAction* action);
     // note: DON'T pass an uint32 timestamp here, which might wrap around after ~1h
-    int rl_tools_control(uint64_t microseconds, RLtoolsObservation* observation, RLtoolsAction* action);
+    RLtoolsStatus rl_tools_control(uint64_t microseconds, RLtoolsObservation* observation, RLtoolsAction* action);
     char* rl_tools_get_checkpoint_name();
     char* rl_tools_get_status_name(RLtoolsStatus status);
 #ifdef __cplusplus
