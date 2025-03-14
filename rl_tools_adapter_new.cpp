@@ -178,9 +178,9 @@ void rl_tools_reset(){
 }
 void rl_tools_init(){
     rl_tools_reset();
-    uint64_t rl_tools_debugging_pool_index = 0;
-    bool rl_tools_debugging_pool_locked = false;
-    bool rl_tools_debugging_pool_updated = false;
+    rl_tools_debugging_pool_index = 0;
+    rl_tools_debugging_pool_locked = false;
+    rl_tools_debugging_pool_updated = false;
 }
 
 
@@ -300,10 +300,10 @@ RLtoolsStatus timing_jitter_status(bool original){
     return 0;
 }
 
-bool rl_tools_healthy(RLtoolsStatus status){
+int rl_tools_healthy(RLtoolsStatus status){
     return (status & RL_TOOLS_STATUS_BITS_ISSUE) == 0;
 }
-float rl_tools_get_timing_bias(bool original){
+float rl_tools_get_timing_bias(int original){
     if((original ? state.control_original_dt_index : state.control_dt_index) < TIMING_STATS_NUM_STEPS){
         return 0;
     }
@@ -315,7 +315,7 @@ float rl_tools_get_timing_bias(bool original){
     return value;
 }
 
-RLtoolsStatus timing_bias_status(bool original){
+RLtoolsStatus timing_bias_status(int original){
     if((original ? state.control_original_dt_index : state.control_dt_index) < TIMING_STATS_NUM_STEPS){
         return 0;
     }
@@ -357,41 +357,39 @@ RLtoolsStatus rl_tools_control(uint64_t microseconds, RLtoolsObservation* observ
     uint64_t time_diff_previous_obs = state.last_observation_timestamp - state.last_control_timestamp;
     uint64_t time_diff_control = microseconds - state.last_control_timestamp;
 
-    // if(state.last_control_timestamp >= state.last_observation_timestamp){
-    //     add_to_debuging_pool("test3", test, 1);
-    //     for(TI i=0; i<3; i++){
-    //         state.position[i] = observation->position[i];
-    //         state.orientation[i] = observation->orientation[i];
-    //         state.linear_velocity[i] = observation->linear_velocity[i];
-    //         state.angular_velocity[i] = observation->angular_velocity[i];
-    //     }
-    //     state.orientation[3] = observation->orientation[3]; // z
-    //     static_assert(ACTION_HISTORY_LENGTH >= 1);
-    //     for(TI step_i = ACTION_HISTORY_LENGTH-1; step_i > 0; step_i--){
-    //         for(TI action_i = 0; action_i < OUTPUT_DIM; action_i++){
-    //             state.action_history[step_i][action_i] = state.action_history[step_i-1][action_i];
-    //         }
-    //     }
-    //     for(TI action_i = 0; action_i < OUTPUT_DIM; action_i++){
-    //         state.action_history[0][action_i] = observation->previous_action[action_i];
-    //     }
-    // }
-    // else{
-    //     add_to_debuging_pool("test4", test, 1);
-    //     float obs_weight = (float)time_diff_obs / (float)time_diff_control;
-    //     float prev_obs_weight = (float)time_diff_previous_obs / (float)time_diff_control;
+    if(state.last_control_timestamp >= state.last_observation_timestamp){
+        for(TI i=0; i<3; i++){
+            state.position[i] = observation->position[i];
+            state.orientation[i] = observation->orientation[i];
+            state.linear_velocity[i] = observation->linear_velocity[i];
+            state.angular_velocity[i] = observation->angular_velocity[i];
+        }
+        state.orientation[3] = observation->orientation[3]; // z
+        static_assert(ACTION_HISTORY_LENGTH >= 1);
+        for(TI step_i = ACTION_HISTORY_LENGTH-1; step_i > 0; step_i--){
+            for(TI action_i = 0; action_i < OUTPUT_DIM; action_i++){
+                state.action_history[step_i][action_i] = state.action_history[step_i-1][action_i];
+            }
+        }
+        for(TI action_i = 0; action_i < OUTPUT_DIM; action_i++){
+            state.action_history[0][action_i] = observation->previous_action[action_i];
+        }
+    }
+    else{
+        float obs_weight = (float)time_diff_obs / (float)time_diff_control;
+        float prev_obs_weight = (float)time_diff_previous_obs / (float)time_diff_control;
 
-    //     for(TI i=0; i<3; i++){
-    //         state.position[i]         = state.position[i]         * prev_obs_weight + obs_weight * observation->position[i];
-    //         state.orientation[i]      = state.orientation[i]      * prev_obs_weight + obs_weight * observation->orientation[i];
-    //         state.linear_velocity[i]  = state.linear_velocity[i]  * prev_obs_weight + obs_weight * observation->linear_velocity[i];
-    //         state.angular_velocity[i] = state.angular_velocity[i] * prev_obs_weight + obs_weight * observation->angular_velocity[i];
-    //     }
-    //     state.orientation[3] = observation->orientation[3]; // z
-    //     for(TI action_i = 0; action_i < OUTPUT_DIM; action_i++){
-    //         state.action_history[0][action_i] = state.action_history[0][action_i] * prev_obs_weight + obs_weight * observation->previous_action[action_i];
-    //     }
-    // }
+        for(TI i=0; i<3; i++){
+            state.position[i]         = state.position[i]         * prev_obs_weight + obs_weight * observation->position[i];
+            state.orientation[i]      = state.orientation[i]      * prev_obs_weight + obs_weight * observation->orientation[i];
+            state.linear_velocity[i]  = state.linear_velocity[i]  * prev_obs_weight + obs_weight * observation->linear_velocity[i];
+            state.angular_velocity[i] = state.angular_velocity[i] * prev_obs_weight + obs_weight * observation->angular_velocity[i];
+        }
+        state.orientation[3] = observation->orientation[3]; // z
+        for(TI action_i = 0; action_i < OUTPUT_DIM; action_i++){
+            state.action_history[0][action_i] = state.action_history[0][action_i] * prev_obs_weight + obs_weight * observation->previous_action[action_i];
+        }
+    }
     RLtoolsStatus status = RL_TOOLS_STATUS_OK;
     if(time_diff_control >= CONTROL_INTERVAL_US || reset){
         reset_debuging_pool();

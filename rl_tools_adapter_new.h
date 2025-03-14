@@ -7,17 +7,6 @@
 #endif
 
 
-typedef struct {
-    float position[3];
-    float orientation[4]; // Quaternion: w, x, y, z
-    float linear_velocity[3];
-    float angular_velocity[3];
-    float previous_action[4];
-} RLtoolsObservation;
-typedef struct {
-    float action[4];
-} RLtoolsAction;
-
 #ifdef RL_TOOLS_WASM
 // typedef unsigned long long uint64_t;
 static_assert(sizeof(uint64_t) == 8, "uint64_t must be 8 bytes");
@@ -54,20 +43,31 @@ extern bool rl_tools_debugging_pool_locked;
 extern bool rl_tools_debugging_pool_updated;
 #endif
 
-typedef uint64_t RLtoolsStatus;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+    typedef struct {
+        float position[3];
+        float orientation[4]; // Quaternion: w, x, y, z
+        float linear_velocity[3];
+        float angular_velocity[3];
+        float previous_action[4];
+    } RLtoolsObservation;
+    typedef struct {
+        float action[4];
+    } RLtoolsAction;
+    typedef uint64_t RLtoolsStatus;
+
     void rl_tools_init();
     void rl_tools_reset();
     float rl_tools_test(RLtoolsAction* action);
     // note: DON'T pass an uint32 timestamp here, which might wrap around after ~1h
-    bool rl_tools_healthy(RLtoolsStatus status);
+    int rl_tools_healthy(RLtoolsStatus status);
     RLtoolsStatus rl_tools_control(uint64_t microseconds, RLtoolsObservation* observation, RLtoolsAction* action);
     const char* rl_tools_get_checkpoint_name();
     char* rl_tools_get_status_message(RLtoolsStatus status);
-    float rl_tools_get_timing_bias(bool original);
+    float rl_tools_get_timing_bias(int original);
 #ifdef __cplusplus
 }
 #endif

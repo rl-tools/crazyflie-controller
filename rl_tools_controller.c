@@ -562,8 +562,10 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
       for(uint8_t i=0; i<4; i++){
         if(i < 3){
           observation.position[i] = state_input[i];
+          observation.orientation[i] = state_input[3+i];
           observation.linear_velocity[i] = state_input[3+4+i];
           observation.angular_velocity[i] = state_input[3+4+3+i];
+          observation.previous_action[i] = action_output[i];
         }
         else{
           observation.orientation[i] = state_input[3+i];
