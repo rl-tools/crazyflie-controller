@@ -573,7 +573,16 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
           non_healthy_status_count = 0;
         }
         DEBUG_PRINT("RLtools controller status %s\n", rl_tools_get_status_message(rlt_status));
-        
+#ifdef RL_TOOLS_ENABLE_DEBUGGING_POOL
+        DEBUG_PRINT("RLtools controller pool size %d\n", rl_tools_debugging_pool_index);
+        for(unsigned pool_i=0; pool_i < rl_tools_debugging_pool_index; pool_i++){
+          DEBUG_PRINT("Debug pool %d: ", pool_i);
+          for(unsigned pool_step_i=0; pool_step_i < rl_tools_debugging_pool_indices[pool_i]; pool_step_i++){
+            DEBUG_PRINT("%f ", rl_tools_debugging_pool[pool_i][pool_step_i]);
+          }
+          DEBUG_PRINT("\n");
+        }
+#endif
       }
       if(use_orig_controller != 0){
         action_output[0] = -0.8;

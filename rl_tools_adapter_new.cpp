@@ -1,4 +1,9 @@
 #include "rl_tools_adapter_new.h"
+#ifdef RL_TOOLS_ENABLE_DEBUGGING_POOL
+float rl_tools_debugging_pool[RL_TOOLS_DEBUGGING_POOL_NUMBER][RL_TOOLS_DEBUGGING_POOL_SIZE];
+uint64_t rl_tools_debugging_pool_indices[RL_TOOLS_DEBUGGING_POOL_NUMBER];
+uint64_t rl_tools_debugging_pool_index = 0;
+#endif
 
 #ifndef RL_TOOLS_WASM
 #include <rl_tools/operations/arm.h>
@@ -387,5 +392,8 @@ RLtoolsStatus rl_tools_control(uint64_t microseconds, RLtoolsObservation* observ
     for(TI action_i=0; action_i < OUTPUT_DIM; action_i++){
         action->action[action_i] = rlt::get(device, output, 0, action_i);
     }
+    rl_tools_debugging_pool_index = 1;
+    rl_tools_debugging_pool_indices[0] = 1;
+    rl_tools_debugging_pool[0][0] = 1337;
     return status;
 }

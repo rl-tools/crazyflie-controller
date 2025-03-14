@@ -40,6 +40,16 @@ static_assert(sizeof(uint64_t) == 8, "uint64_t must be 8 bytes");
 #define RL_TOOLS_STATUS_BITS_MAGNITUDE_SHIFT         (RL_TOOLS_STATUS_BITS_ISSUE_SHIFT + 8 + 1 + 16)
 #define RL_TOOLS_STATUS_BITS_MAGNITUDE               (0xffffULL << RL_TOOLS_STATUS_BITS_MAGNITUDE_SHIFT)
 
+
+#define RL_TOOLS_ENABLE_DEBUGGING_POOL
+#ifdef RL_TOOLS_ENABLE_DEBUGGING_POOL
+#define RL_TOOLS_DEBUGGING_POOL_NUMBER 10
+#define RL_TOOLS_DEBUGGING_POOL_SIZE 100
+extern float rl_tools_debugging_pool[RL_TOOLS_DEBUGGING_POOL_NUMBER][RL_TOOLS_DEBUGGING_POOL_SIZE];
+extern uint64_t rl_tools_debugging_pool_indices[RL_TOOLS_DEBUGGING_POOL_NUMBER];
+extern uint64_t rl_tools_debugging_pool_index;
+#endif
+
 typedef uint64_t RLtoolsStatus;
 
 #ifdef __cplusplus
