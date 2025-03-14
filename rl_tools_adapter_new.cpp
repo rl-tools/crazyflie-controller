@@ -1,19 +1,62 @@
+#define RL_TOOLS_DISABLE_TEST
 #include "rl_tools_adapter_new.h"
 #ifdef RL_TOOLS_ENABLE_DEBUGGING_POOL
+char rl_tools_debugging_pool_names[RL_TOOLS_DEBUGGING_POOL_NUMBER][RL_TOOLS_DEBUGGING_POOL_NAME_LENGTH];
 float rl_tools_debugging_pool[RL_TOOLS_DEBUGGING_POOL_NUMBER][RL_TOOLS_DEBUGGING_POOL_SIZE];
 uint64_t rl_tools_debugging_pool_indices[RL_TOOLS_DEBUGGING_POOL_NUMBER];
 uint64_t rl_tools_debugging_pool_index = 0;
+bool rl_tools_debugging_pool_locked = false;
+bool rl_tools_debugging_pool_updated = false;
 #endif
+
+uint64_t portable_strlen(const char* str) {
+    const char* ptr = str;
+    while (*ptr != '\0') {
+        ptr++;
+    }
+    return ptr - str;
+}
+
+char *portable_strcpy(char *dest, const char *src) {
+    char *original_dest = dest;
+    while ((*dest++ = *src++) != '\0');
+    return original_dest;
+}
+
+static void reset_debuging_pool(){
+    if(!rl_tools_debugging_pool_locked){
+        rl_tools_debugging_pool_index = 0;
+        rl_tools_debugging_pool_updated = true;
+    }
+}
+static void add_to_debuging_pool(const char* name, const float* values, uint64_t num){
+    if(!rl_tools_debugging_pool_locked && rl_tools_debugging_pool_index < RL_TOOLS_DEBUGGING_POOL_NUMBER){
+        uint32_t size = (num < RL_TOOLS_DEBUGGING_POOL_SIZE ? num : RL_TOOLS_DEBUGGING_POOL_SIZE);
+        for(uint64_t i = 0; i < size; i++){
+            rl_tools_debugging_pool[rl_tools_debugging_pool_index][i] = values[i];
+        }
+        if(portable_strlen(name) < RL_TOOLS_DEBUGGING_POOL_NAME_LENGTH){
+            portable_strcpy(rl_tools_debugging_pool_names[rl_tools_debugging_pool_index], name);
+        } else {
+            portable_strcpy(rl_tools_debugging_pool_names[rl_tools_debugging_pool_index], "name too long");
+        }
+        rl_tools_debugging_pool_indices[rl_tools_debugging_pool_index] = size;
+        rl_tools_debugging_pool_index++;
+        rl_tools_debugging_pool_updated = true;
+    }
+}
 
 #ifndef RL_TOOLS_WASM
 #include <rl_tools/operations/arm.h>
 #else
 #include <rl_tools/operations/wasm32.h>
 #endif
-#include <rl_tools/nn/layers/standardize/operations_generic.h>
 
+
+#include <rl_tools/nn/layers/standardize/operations_generic.h>
 #ifndef RL_TOOLS_WASM
 #include <rl_tools/nn/layers/dense/operations_arm/opt.h>
+// #include <rl_tools/nn/layers/dense/operations_generic.h>
 #else
 #include <rl_tools/nn/layers/dense/operations_generic.h>
 #endif
@@ -66,6 +109,8 @@ struct State{
     uint64_t control_original_dt[TIMING_STATS_NUM_STEPS];
     uint64_t control_original_dt_index = 0;
 };
+
+
 
 
 DEVICE device;
@@ -133,21 +178,11 @@ void rl_tools_reset(){
 }
 void rl_tools_init(){
     rl_tools_reset();
+    uint64_t rl_tools_debugging_pool_index = 0;
+    bool rl_tools_debugging_pool_locked = false;
+    bool rl_tools_debugging_pool_updated = false;
 }
 
-TI portable_strlen(const char* str) {
-    const char* ptr = str;
-    while (*ptr != '\0') {
-        ptr++;
-    }
-    return ptr - str;
-}
-
-char *portable_strcpy(char *dest, const char *src) {
-    char *original_dest = dest;
-    while ((*dest++ = *src++) != '\0');
-    return original_dest;
-}
 
 const char* rl_tools_get_checkpoint_name(){
     return (char*)rlt::checkpoint::meta::name;
@@ -322,41 +357,44 @@ RLtoolsStatus rl_tools_control(uint64_t microseconds, RLtoolsObservation* observ
     uint64_t time_diff_previous_obs = state.last_observation_timestamp - state.last_control_timestamp;
     uint64_t time_diff_control = microseconds - state.last_control_timestamp;
 
-    if(state.last_control_timestamp >= state.last_observation_timestamp){
-        for(TI i=0; i<3; i++){
-            state.position[i] = observation->position[i];
-            state.orientation[i] = observation->orientation[i];
-            state.linear_velocity[i] = observation->linear_velocity[i];
-            state.angular_velocity[i] = observation->angular_velocity[i];
-        }
-        state.orientation[3] = observation->orientation[3]; // z
-        static_assert(ACTION_HISTORY_LENGTH >= 1);
-        for(TI step_i = ACTION_HISTORY_LENGTH-1; step_i > 0; step_i--){
-            for(TI action_i = 0; action_i < OUTPUT_DIM; action_i++){
-                state.action_history[step_i][action_i] = state.action_history[step_i-1][action_i];
-            }
-        }
-        for(TI action_i = 0; action_i < OUTPUT_DIM; action_i++){
-            state.action_history[0][action_i] = observation->previous_action[action_i];
-        }
-    }
-    else{
-        float obs_weight = (float)time_diff_obs / (float)time_diff_control;
-        float prev_obs_weight = (float)time_diff_previous_obs / (float)time_diff_control;
+    // if(state.last_control_timestamp >= state.last_observation_timestamp){
+    //     add_to_debuging_pool("test3", test, 1);
+    //     for(TI i=0; i<3; i++){
+    //         state.position[i] = observation->position[i];
+    //         state.orientation[i] = observation->orientation[i];
+    //         state.linear_velocity[i] = observation->linear_velocity[i];
+    //         state.angular_velocity[i] = observation->angular_velocity[i];
+    //     }
+    //     state.orientation[3] = observation->orientation[3]; // z
+    //     static_assert(ACTION_HISTORY_LENGTH >= 1);
+    //     for(TI step_i = ACTION_HISTORY_LENGTH-1; step_i > 0; step_i--){
+    //         for(TI action_i = 0; action_i < OUTPUT_DIM; action_i++){
+    //             state.action_history[step_i][action_i] = state.action_history[step_i-1][action_i];
+    //         }
+    //     }
+    //     for(TI action_i = 0; action_i < OUTPUT_DIM; action_i++){
+    //         state.action_history[0][action_i] = observation->previous_action[action_i];
+    //     }
+    // }
+    // else{
+    //     add_to_debuging_pool("test4", test, 1);
+    //     float obs_weight = (float)time_diff_obs / (float)time_diff_control;
+    //     float prev_obs_weight = (float)time_diff_previous_obs / (float)time_diff_control;
 
-        for(TI i=0; i<3; i++){
-            state.position[i]         = state.position[i]         * prev_obs_weight + obs_weight * observation->position[i];
-            state.orientation[i]      = state.orientation[i]      * prev_obs_weight + obs_weight * observation->orientation[i];
-            state.linear_velocity[i]  = state.linear_velocity[i]  * prev_obs_weight + obs_weight * observation->linear_velocity[i];
-            state.angular_velocity[i] = state.angular_velocity[i] * prev_obs_weight + obs_weight * observation->angular_velocity[i];
-        }
-        state.orientation[3] = observation->orientation[3]; // z
-        for(TI action_i = 0; action_i < OUTPUT_DIM; action_i++){
-            state.action_history[0][action_i] = state.action_history[0][action_i] * prev_obs_weight + obs_weight * observation->previous_action[action_i];
-        }
-    }
+    //     for(TI i=0; i<3; i++){
+    //         state.position[i]         = state.position[i]         * prev_obs_weight + obs_weight * observation->position[i];
+    //         state.orientation[i]      = state.orientation[i]      * prev_obs_weight + obs_weight * observation->orientation[i];
+    //         state.linear_velocity[i]  = state.linear_velocity[i]  * prev_obs_weight + obs_weight * observation->linear_velocity[i];
+    //         state.angular_velocity[i] = state.angular_velocity[i] * prev_obs_weight + obs_weight * observation->angular_velocity[i];
+    //     }
+    //     state.orientation[3] = observation->orientation[3]; // z
+    //     for(TI action_i = 0; action_i < OUTPUT_DIM; action_i++){
+    //         state.action_history[0][action_i] = state.action_history[0][action_i] * prev_obs_weight + obs_weight * observation->previous_action[action_i];
+    //     }
+    // }
     RLtoolsStatus status = RL_TOOLS_STATUS_OK;
     if(time_diff_control >= CONTROL_INTERVAL_US || reset){
+        reset_debuging_pool();
         if(!reset){
             state.control_dt[state.control_dt_index++ % TIMING_STATS_NUM_STEPS] = time_diff_control;
         }
@@ -392,8 +430,5 @@ RLtoolsStatus rl_tools_control(uint64_t microseconds, RLtoolsObservation* observ
     for(TI action_i=0; action_i < OUTPUT_DIM; action_i++){
         action->action[action_i] = rlt::get(device, output, 0, action_i);
     }
-    rl_tools_debugging_pool_index = 1;
-    rl_tools_debugging_pool_indices[0] = 1;
-    rl_tools_debugging_pool[0][0] = 1337;
     return status;
 }
