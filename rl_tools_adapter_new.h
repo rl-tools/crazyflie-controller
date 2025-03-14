@@ -18,6 +18,11 @@ typedef struct {
     float action[4];
 } RLtoolsAction;
 
+#ifdef RL_TOOLS_WASM
+// typedef unsigned long long uint64_t;
+static_assert(sizeof(uint64_t) == 8, "uint64_t must be 8 bytes");
+#endif
+
 #define RL_TOOLS_STATUS_TIMING_JITTER_LOW_THRESHOLD 0.8
 #define RL_TOOLS_STATUS_TIMING_JITTER_HIGH_THRESHOLD 1.2
 #define RL_TOOLS_STATUS_TIMING_BIAS_LOW_THRESHOLD 0.95
