@@ -1,3 +1,6 @@
+// #define NEW_RL_TOOLS_CONTROLLER
+
+
 #include "debug.h"
 #include "usec_time.h"
 #include <math.h>
@@ -11,7 +14,11 @@
 #include "controller_indi.h"
 #include "controller_brescianini.h"
 #include "power_distribution.h"
+#ifdef NEW_RL_TOOLS_CONTROLLER
 #include "rl_tools_adapter_new.h"
+#else
+#include "rl_tools_adapter.h"
+#endif
 #include "stabilizer_types.h"
 #include "pm.h"
 #include "task.h"
@@ -76,7 +83,9 @@ static float vel_distance_limit_bresciani;
 static uint8_t mellinger_enable_integrators;
 static uint8_t log_set_motors = 0;
 static float velocity_cmd_multiplier, velocity_cmd_p_term;
+#ifdef NEW_RL_TOOLS_CONTROLLER
 static RLtoolsStatus non_healthy_status;
+#endif
 uint32_t non_healthy_status_count;
 
 enum Mode{
@@ -558,6 +567,7 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
     {
       int64_t before = usecTimestamp();
       uint32_t start_cycle = DWT->CYCCNT;
+#ifdef NEW_RL_TOOLS_CONTROLLER
       RLtoolsObservation observation;
       for(uint8_t i=0; i<4; i++){
         if(i < 3){
@@ -581,13 +591,18 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
       for(uint8_t i=0; i<4; i++){
         action_output[i] = action.action[i];
       }
+#else
+      rl_tools_control(state_input, action_output);
+#endif
       if((tick % (CONTROL_INTERVAL_MS * 1000) == 0)){
+        #ifdef NEW_RL_TOOLS_CONTROLLER
         if(non_healthy_status_count > 0){
           DEBUG_PRINT("%d non healthy statii, latest: %s\n", non_healthy_status_count, rl_tools_get_status_message(non_healthy_status));
           DEBUG_PRINT("bias control %f bias orig %f \n", rl_tools_get_timing_bias(false), rl_tools_get_timing_bias(true));
           non_healthy_status_count = 0;
         }
         DEBUG_PRINT("RLtools controller status %s\n", rl_tools_get_status_message(rlt_status));
+        #endif
         if(controller_tick > 1000){
           #ifdef RL_TOOLS_ENABLE_DEBUGGING_POOL
           debugging_pool_print();
