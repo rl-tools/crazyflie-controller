@@ -40,7 +40,7 @@ using ACTOR_TYPE = ACTOR_TYPE_ORIGINAL::template CHANGE_BATCH_SIZE<TI, 1>;
 using T = typename ACTOR_TYPE::SPEC::T;
 constexpr TI ACTION_HISTORY_LENGTH = 32; //rlt::checkpoint::environment::ACTION_HISTORY_LENGTH
 constexpr TI CONTROL_INTERVAL_US_ORIGINAL = 1000 * 10; // Training is 100hz
-constexpr TI CONTROL_INTERVAL_US = 1000 * 2; // Training is 100hz
+constexpr TI CONTROL_INTERVAL_US = 1000 * 2; // Inference is at 500hz
 static constexpr TI INPUT_DIM = rlt::get_last(ACTOR_TYPE::INPUT_SHAPE{});
 static constexpr TI OUTPUT_DIM = rlt::get_last(ACTOR_TYPE::OUTPUT_SHAPE{});
 static_assert(OUTPUT_DIM == 4);
@@ -77,8 +77,8 @@ static rlt::Tensor<rlt::tensor::Specification<T, TI, rlt::checkpoint::example::o
 // State
 State state;
 
-template <typename DEVICE, typename OBS_SPEC>
-static inline void observe(DEVICE& device, const State& state, rlt::Tensor<OBS_SPEC>& observation){
+template <typename OBS_SPEC>
+static inline void observe(rlt::Tensor<OBS_SPEC>& observation){
     static_assert(OBS_SPEC::SHAPE::template GET<0> == 1);
     static_assert(OBS_SPEC::SHAPE::template GET<1> == 18 + OUTPUT_DIM * ACTION_HISTORY_LENGTH); // position + orientation + linear_velocity + angular_velocity + action_history
     TI base = 0;
@@ -214,7 +214,7 @@ char* rl_tools_get_status_message(RLtoolsStatus status){
     return status_message;
 }
 
-float rl_tools_test(RLtoolsAction* output){
+float rl_tools_test(RLtoolsAction* p_output){
 #ifndef RL_TOOLS_DISABLE_TEST
     rlt::Mode<rlt::mode::Evaluation<>> mode;
     rlt::evaluate(device, rlt::checkpoint::actor::module, rlt::checkpoint::example::input::container, output_test, buffers_test, rng, mode);
@@ -223,7 +223,7 @@ float rl_tools_test(RLtoolsAction* output){
         for(TI i = 0; i < OUTPUT_DIM; i++){
             acc += rlt::math::abs(device.math, rlt::get(device, output_test, 0, batch_i, i) - rlt::get(device, rlt::checkpoint::example::output::container, 0, batch_i, i));
             if(batch_i == 0){
-                output->action[i] = rlt::get(device, output_test, 0, batch_i, i);
+                p_output->action[i] = rlt::get(device, output_test, 0, batch_i, i);
             }
         }
     }
@@ -263,8 +263,7 @@ RLtoolsStatus timing_jitter_status(bool original){
 bool rl_tools_healthy(RLtoolsStatus status){
     return (status & RL_TOOLS_STATUS_BITS_ISSUE) == 0;
 }
-
-RLtoolsStatus timing_bias_status(bool original){
+float rl_tools_get_timing_bias(bool original){
     if((original ? state.control_original_dt_index : state.control_dt_index) < TIMING_STATS_NUM_STEPS){
         return 0;
     }
@@ -273,6 +272,14 @@ RLtoolsStatus timing_bias_status(bool original){
         value += original ? state.control_original_dt[i] : state.control_dt[i];
     }
     value /= TIMING_STATS_NUM_STEPS;
+    return value;
+}
+
+RLtoolsStatus timing_bias_status(bool original){
+    if((original ? state.control_original_dt_index : state.control_dt_index) < TIMING_STATS_NUM_STEPS){
+        return 0;
+    }
+    T value = rl_tools_get_timing_bias(original);
 
     auto expected = original ? CONTROL_INTERVAL_US_ORIGINAL : CONTROL_INTERVAL_US;
     if(value > expected * RL_TOOLS_STATUS_TIMING_BIAS_HIGH_THRESHOLD || value < expected * RL_TOOLS_STATUS_TIMING_BIAS_LOW_THRESHOLD){
@@ -355,7 +362,7 @@ RLtoolsStatus rl_tools_control(uint64_t microseconds, RLtoolsObservation* observ
         }
         uint64_t time_diff_control_original = microseconds - state.last_control_timestamp_original;
         bool real_control_step = (time_diff_control_original >= CONTROL_INTERVAL_US_ORIGINAL) || reset;
-        observe(device, state, input);
+        observe(input);
         rlt::Mode<rlt::mode::Evaluation<>> mode;
         if(real_control_step){
             rlt::evaluate_step(device, rlt::checkpoint::actor::module, input, state.policy_state, output, buffers, rng, mode);

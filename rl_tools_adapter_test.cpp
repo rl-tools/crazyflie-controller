@@ -10,7 +10,6 @@ int main(){
     for(uint i = 0; i < OUTPUT_DIM; i++){
         std::cout << "action[" << i << "] = " << action.action[i] << std::endl;
     }
-    uint64_t timestamp = 0;
     RLtoolsObservation observation;
     observation.position[0] = 0.0f;
     observation.position[1] = 0.0f;
@@ -36,10 +35,10 @@ int main(){
 
         }
         std::cout << timestamp << " status: " << rl_tools_get_status_message(status) << std::endl;
-        // for(uint i = 0; i < OUTPUT_DIM; i++){
-        //     std::cout << "action[" << i << "] = " << action.action[i] << std::endl;
-        // }
-        timestamp += 2500; //std::uniform_int_distribution<uint>(500, 5000)(rng);
+        for(uint i = 0; i < OUTPUT_DIM; i++){
+            std::cout << "action[" << i << "] = " << action.action[i] << std::endl;
+        }
+        timestamp += 2000; //std::uniform_int_distribution<uint>(500, 5000)(rng);
     }
     return 0;
 }

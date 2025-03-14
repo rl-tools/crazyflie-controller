@@ -76,6 +76,8 @@ static float vel_distance_limit_bresciani;
 static uint8_t mellinger_enable_integrators;
 static uint8_t log_set_motors = 0;
 static float velocity_cmd_multiplier, velocity_cmd_p_term;
+static RLtoolsStatus non_healthy_status;
+uint32_t non_healthy_status_count;
 
 enum Mode{
   NORMAL = 0,
@@ -270,6 +272,7 @@ void controllerOutOfTreeInit(void){
   figure_eight_scale = 1;
   figure_eight_progress = 0;
   figure_eight_warmup_time = 2;
+  non_healthy_status_count = 0;
 
   controllerPidInit();
   controllerMellingerFirmwareInit();
@@ -544,7 +547,7 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
       uint32_t start_cycle = DWT->CYCCNT;
       RLtoolsObservation observation;
       for(uint8_t i=0; i<4; i++){
-        if(i <= 3){
+        if(i < 3){
           observation.position[i] = state_input[i];
           observation.linear_velocity[i] = state_input[3+4+i];
           observation.angular_velocity[i] = state_input[3+4+3+i];
@@ -556,11 +559,21 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
       }
       RLtoolsAction action;
       RLtoolsStatus rlt_status = rl_tools_control(before, &observation, &action);
-      if(rlt_status != RL_TOOLS_STATUS_OK && rlt_status != RL_TOOLS_STATUS_CONTROL){
-        DEBUG_PRINT("RLtools controller status: %d\n", rlt_status);
+      if(!rl_tools_healthy(rlt_status)){
+        non_healthy_status = rlt_status;
+        non_healthy_status_count++;
       }
       for(uint8_t i=0; i<4; i++){
         action_output[i] = action.action[i];
+      }
+      if((tick % (CONTROL_INTERVAL_MS * 1000) == 0)){
+        if(non_healthy_status_count > 0){
+          DEBUG_PRINT("%d non healthy statii, latest: %s\n", non_healthy_status_count, rl_tools_get_status_message(non_healthy_status));
+          DEBUG_PRINT("bias control %f bias orig %f \n", rl_tools_get_timing_bias(false), rl_tools_get_timing_bias(true));
+          non_healthy_status_count = 0;
+        }
+        DEBUG_PRINT("RLtools controller status %s\n", rl_tools_get_status_message(rlt_status));
+        
       }
       if(use_orig_controller != 0){
         action_output[0] = -0.8;

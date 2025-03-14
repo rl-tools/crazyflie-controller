@@ -53,6 +53,7 @@ extern "C" {
     RLtoolsStatus rl_tools_control(uint64_t microseconds, RLtoolsObservation* observation, RLtoolsAction* action);
     const char* rl_tools_get_checkpoint_name();
     char* rl_tools_get_status_message(RLtoolsStatus status);
+    float rl_tools_get_timing_bias(bool original);
 #ifdef __cplusplus
 }
 #endif
