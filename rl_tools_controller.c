@@ -50,6 +50,7 @@ static ControllerState controller_state;
 // Counters
 static uint64_t controller_tick = 0; // Number of control function invocations
 static uint64_t forward_tick = 0; // Number of forward passes
+static uint64_t rlt_policy_tick = 0; // Number of forward passes
 
 // Timestamps
 static uint64_t timestamp_last_reset;
@@ -222,6 +223,7 @@ void controllerOutOfTreeInit(void){
 
   controller_state = STATE_RESET;
   controller_tick = 0;
+  rlt_policy_tick = 0;
   motor_cmd_divider = 1.0;
   motor_cmd_divider_warmup = 7.0;
 
@@ -592,13 +594,16 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
       for(uint8_t i=0; i<4; i++){
         action_output[i] = action.action[i];
       }
+      if(rlt_status & RL_TOOLS_STATUS_BIT_SOURCE_CONTROL){
+        rlt_policy_tick++;
+      }
 #else
       rl_tools_control(state_input, action_output);
 #endif
       uint32_t end_cycle = DWT->CYCCNT;
       uint32_t cycles = end_cycle - start_cycle;
       int64_t after = usecTimestamp();
-      if (tick % (CONTROL_INTERVAL_MS * 1000) == 0){
+      if ((rlt_status & RL_TOOLS_STATUS_BIT_SOURCE_CONTROL) && rlt_policy_tick % 500 == 0){
         DEBUG_PRINT("rl_tools_control took %lu cycles (%lldus)\n", cycles, after - before);
       }
       if((tick % (CONTROL_INTERVAL_MS * 1000) == 0)){

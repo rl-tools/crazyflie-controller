@@ -202,9 +202,12 @@ char* rl_tools_get_status_message(RLtoolsStatus status){
         append("OK", position);
         if(status & RL_TOOLS_STATUS_BIT_SOURCE_CONTROL){
             append(" CONTROL", position);
-        }
-        if(status & RL_TOOLS_STATUS_BIT_SOURCE_CONTROL_ORIGINAL){
-            append("_ORIGINAL", position);
+            if(status & RL_TOOLS_STATUS_BIT_SOURCE_CONTROL_ORIGINAL){
+                append(" ORIGINAL", position);
+            }
+            else{
+                append(" INTERMEDIATE", position);
+            }
         }
     }
     else{
@@ -212,7 +215,10 @@ char* rl_tools_get_status_message(RLtoolsStatus status){
         if(status & RL_TOOLS_STATUS_BIT_SOURCE_CONTROL){
             append(" CONTROL", position);
             if(status & RL_TOOLS_STATUS_BIT_SOURCE_CONTROL_ORIGINAL){
-                append("_ORIGINAL", position);
+                append(" ORIGINAL", position);
+            }
+            else{
+                append(" INTERMEDIATE", position);
             }
         }
         else{
