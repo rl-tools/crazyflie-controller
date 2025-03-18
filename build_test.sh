@@ -1,1 +1,2 @@
-g++ -I external/rl_tools/include/ -D TEST_MAIN rl_tools_adapter_new.cpp && ./a.out
+g++ -I external/rl_tools/include/ rl_tools_adapter_new.cpp rl_tools_adapter_test.cpp \
+    -fsanitize=address,undefined -fstack-protector-strong && ./a.out
