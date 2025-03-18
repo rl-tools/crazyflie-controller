@@ -1,4 +1,4 @@
-#define RL_TOOLS_DISABLE_TEST
+// #define RL_TOOLS_DISABLE_TEST
 #include "rl_tools_adapter_new.h"
 #ifdef RL_TOOLS_ENABLE_DEBUGGING_POOL
 char rl_tools_debugging_pool_names[RL_TOOLS_DEBUGGING_POOL_NUMBER][RL_TOOLS_DEBUGGING_POOL_NAME_LENGTH];
@@ -81,10 +81,11 @@ using DEVICE = rlt::devices::DefaultWASM32;
 #endif
 
 using TI = typename DEVICE::index_t;
+static constexpr TI TEST_SEQUENCE_LENGTH = rlt::checkpoint::example::input::SHAPE::template GET<0>;
 static constexpr TI TEST_BATCH_SIZE = rlt::checkpoint::example::input::SHAPE::template GET<1>;
 using ACTOR_TYPE_ORIGINAL = rlt::checkpoint::actor::TYPE;
-using ACTOR_TYPE_TEST = rlt::checkpoint::actor::TYPE::template CHANGE_BATCH_SIZE<TI, TEST_BATCH_SIZE>;
-using ACTOR_TYPE = ACTOR_TYPE_ORIGINAL::template CHANGE_BATCH_SIZE<TI, 1>;
+using ACTOR_TYPE_TEST = rlt::checkpoint::actor::TYPE::template CHANGE_BATCH_SIZE<TI, TEST_BATCH_SIZE>::template CHANGE_SEQUENCE_LENGTH<TI, 1>;
+using ACTOR_TYPE = ACTOR_TYPE_ORIGINAL::template CHANGE_BATCH_SIZE<TI, 1>::template CHANGE_SEQUENCE_LENGTH<TI, 1>;
 using T = typename ACTOR_TYPE::SPEC::T;
 constexpr TI ACTION_HISTORY_LENGTH = 1; //rlt::checkpoint::environment::ACTION_HISTORY_LENGTH
 constexpr TI CONTROL_INTERVAL_US_ORIGINAL = 1000 * 10; // Training is 100hz
@@ -118,8 +119,9 @@ bool rng = false;
 
 // Buffers
 static ACTOR_TYPE_TEST::template Buffer<false> buffers_test;
-static ACTOR_TYPE::template Buffer<false> buffers;
+static ACTOR_TYPE_TEST::State<false> policy_state_test;
 static ACTOR_TYPE::State<false> policy_state_buffer;
+static ACTOR_TYPE::template Buffer<false> buffers;
 static rlt::Tensor<rlt::tensor::Specification<T, TI, rlt::tensor::Shape<TI, 1, INPUT_DIM>, false>> input;
 static rlt::Tensor<rlt::tensor::Specification<T, TI, rlt::tensor::Shape<TI, 1, OUTPUT_DIM>, false>> output;
 static rlt::Tensor<rlt::tensor::Specification<T, TI, rlt::checkpoint::example::output::SHAPE, false>> output_test;
@@ -257,7 +259,13 @@ char* rl_tools_get_status_message(RLtoolsStatus status){
 float rl_tools_test(RLtoolsAction* p_output){
 #ifndef RL_TOOLS_DISABLE_TEST
     rlt::Mode<rlt::mode::Evaluation<>> mode;
-    rlt::evaluate(device, rlt::checkpoint::actor::module, rlt::checkpoint::example::input::container, output_test, buffers_test, rng, mode);
+    rlt::reset(device, rlt::checkpoint::actor::module, policy_state_test, rng);
+    for(TI step_i = 0; step_i < TEST_SEQUENCE_LENGTH; step_i++){
+        auto step_input = rlt::view(device, rlt::checkpoint::example::input::container, step_i);
+        auto step_output = rlt::view(device, output_test, step_i);
+        rlt::evaluate_step(device, rlt::checkpoint::actor::module, step_input, policy_state_test, step_output, buffers_test, rng, mode);
+    // rlt::evaluate(device, rlt::checkpoint::actor::module, rlt::checkpoint::example::input::container, output_test, buffers_test, rng, mode);
+    }
     float acc = 0;
     for(TI batch_i = 0; batch_i < TEST_BATCH_SIZE; batch_i++){
         for(TI i = 0; i < OUTPUT_DIM; i++){

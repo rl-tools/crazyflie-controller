@@ -11,3 +11,5 @@ ablation_data*
 .venv
 *.out
 *.wasm
+.idea
+cmake-build*
