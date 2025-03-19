@@ -1,4 +1,4 @@
-// #define RL_TOOLS_DISABLE_TEST
+#define RL_TOOLS_DISABLE_TEST
 #include "rl_tools_adapter_new.h"
 #ifdef RL_TOOLS_ENABLE_DEBUGGING_POOL
 char rl_tools_debugging_pool_names[RL_TOOLS_DEBUGGING_POOL_NUMBER][RL_TOOLS_DEBUGGING_POOL_NAME_LENGTH];
@@ -83,8 +83,12 @@ using DEVICE = rlt::devices::DefaultWASM32;
 using TI = typename DEVICE::index_t;
 static constexpr TI TEST_SEQUENCE_LENGTH = rlt::checkpoint::example::input::SHAPE::template GET<0>;
 static constexpr TI TEST_BATCH_SIZE = rlt::checkpoint::example::input::SHAPE::template GET<1>;
+static constexpr TI TEST_SEQUENCE_LENGTH_ACTUAL = 5;
+static constexpr TI TEST_BATCH_SIZE_ACTUAL = 2;
+static_assert(TEST_BATCH_SIZE_ACTUAL <= TEST_BATCH_SIZE);
+static_assert(TEST_SEQUENCE_LENGTH_ACTUAL <= TEST_SEQUENCE_LENGTH);
 using ACTOR_TYPE_ORIGINAL = rlt::checkpoint::actor::TYPE;
-using ACTOR_TYPE_TEST = rlt::checkpoint::actor::TYPE::template CHANGE_BATCH_SIZE<TI, TEST_BATCH_SIZE>::template CHANGE_SEQUENCE_LENGTH<TI, 1>;
+using ACTOR_TYPE_TEST = rlt::checkpoint::actor::TYPE::template CHANGE_BATCH_SIZE<TI, 1>::template CHANGE_SEQUENCE_LENGTH<TI, 1>;
 using ACTOR_TYPE = ACTOR_TYPE_ORIGINAL::template CHANGE_BATCH_SIZE<TI, 1>::template CHANGE_SEQUENCE_LENGTH<TI, 1>;
 using T = typename ACTOR_TYPE::SPEC::T;
 constexpr TI ACTION_HISTORY_LENGTH = 1; //rlt::checkpoint::environment::ACTION_HISTORY_LENGTH
@@ -124,7 +128,6 @@ static ACTOR_TYPE::State<false> policy_state_buffer;
 static ACTOR_TYPE::template Buffer<false> buffers;
 static rlt::Tensor<rlt::tensor::Specification<T, TI, rlt::tensor::Shape<TI, 1, INPUT_DIM>, false>> input;
 static rlt::Tensor<rlt::tensor::Specification<T, TI, rlt::tensor::Shape<TI, 1, OUTPUT_DIM>, false>> output;
-static rlt::Tensor<rlt::tensor::Specification<T, TI, rlt::checkpoint::example::output::SHAPE, false>> output_test;
 
 // State
 State state;
@@ -265,23 +268,28 @@ char* rl_tools_get_status_message(RLtoolsStatus status){
 float rl_tools_test(RLtoolsAction* p_output){
 #ifndef RL_TOOLS_DISABLE_TEST
     rlt::Mode<rlt::mode::Evaluation<>> mode;
-    rlt::reset(device, rlt::checkpoint::actor::module, policy_state_test, rng);
-    for(TI step_i = 0; step_i < TEST_SEQUENCE_LENGTH; step_i++){
-        auto step_input = rlt::view(device, rlt::checkpoint::example::input::container, step_i);
-        auto step_output = rlt::view(device, output_test, step_i);
-        rlt::evaluate_step(device, rlt::checkpoint::actor::module, step_input, policy_state_test, step_output, buffers_test, rng, mode);
-    // rlt::evaluate(device, rlt::checkpoint::actor::module, rlt::checkpoint::example::input::container, output_test, buffers_test, rng, mode);
-    }
     float acc = 0;
-    for(TI batch_i = 0; batch_i < TEST_BATCH_SIZE; batch_i++){
-        for(TI i = 0; i < OUTPUT_DIM; i++){
-            acc += rlt::math::abs(device.math, rlt::get(device, output_test, 0, batch_i, i) - rlt::get(device, rlt::checkpoint::example::output::container, 0, batch_i, i));
-            if(batch_i == 0){
-                p_output->action[i] = rlt::get(device, output_test, 0, batch_i, i);
+    uint64_t num_values = 0;
+    for(TI batch_i = 0; batch_i < TEST_BATCH_SIZE_ACTUAL; batch_i++){
+        rlt::reset(device, rlt::checkpoint::actor::module, policy_state_test, rng);
+        for(TI step_i = 0; step_i < TEST_SEQUENCE_LENGTH_ACTUAL; step_i++){
+            const auto step_input = rlt::view(device, rlt::checkpoint::example::input::container, step_i);
+            const auto batch_input = rlt::view_range(device, step_input, batch_i, rlt::tensor::ViewSpec<0, 1>{});
+            rlt::utils::assert_exit(device, !rlt::is_nan(device, batch_input), "input is nan");
+            rlt::utils::assert_exit(device, !rlt::is_nan(device, policy_state_test.content_state.next_content_state.state.state), "state is nan");
+            rlt::evaluate_step(device, rlt::checkpoint::actor::module, batch_input, policy_state_test, output, buffers_test, rng, mode);
+            rlt::utils::assert_exit(device, !rlt::is_nan(device, output), "output is nan");
+            for(TI action_i = 0; action_i < OUTPUT_DIM; action_i++){
+                acc += rlt::math::abs(device.math, rlt::get(device, output, 0, action_i) - rlt::get(device, rlt::checkpoint::example::output::container, step_i, batch_i, action_i));
+                num_values += 1;
+                rlt::utils::assert_exit(device, !rlt::math::is_nan(device.math, acc), "output is nan");
+                if(batch_i == 0 && step_i == TEST_SEQUENCE_LENGTH-1){
+                    p_output->action[action_i] = rlt::get(device, output, 0, action_i);
+                }
             }
         }
     }
-    return acc;
+    return acc / num_values;
 #else
     return 0;
 #endif

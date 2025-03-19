@@ -1,4 +1,3 @@
-#define RL_TOOLS_DEBUG_CONTAINER_CHECK_BOUNDS
 #include "rl_tools_adapter_new.h"
 #include <iostream>
 #include <random>
