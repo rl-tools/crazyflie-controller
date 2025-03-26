@@ -130,6 +130,7 @@ static float action_output[4];
 const uint8_t motors[4] = {MOTOR_M1, MOTOR_M2, MOTOR_M3, MOTOR_M4};
 static uint8_t set_motors_overwrite = 0;
 static uint16_t motor_cmd[4];
+static float motor_cmd_float[4];
 static float motor_cmd_divider, motor_cmd_divider_warmup;
 static bool prev_set_motors, prev_pre_set_motors;
 static uint8_t use_pre_set_warmup;
@@ -231,6 +232,10 @@ void controllerOutOfTreeInit(void){
   motor_cmd[1] = 0;
   motor_cmd[2] = 0;
   motor_cmd[3] = 0;
+  motor_cmd_float[0] = 0;
+  motor_cmd_float[1] = 0;
+  motor_cmd_float[2] = 0;
+  motor_cmd_float[3] = 0;
   timestamp_last_reset = usecTimestamp();
   prev_set_motors = false;
   prev_pre_set_motors = false;
@@ -635,6 +640,7 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
       float a_pp = (action_output[i] + 1)/2;
       float des_rpm = (MAX_RPM - MIN_RPM) * a_pp + MIN_RPM;
       float des_percentage = des_rpm / MAX_RPM;
+      motor_cmd_float[i] = des_percentage;
       motor_cmd[i] = des_percentage * UINT16_MAX;
       if(set_motors && use_orig_controller == 0){
         motorsSetRatio(motors[i], clip((float)motor_cmd[i] / motor_cmd_divider, 0, UINT16_MAX));
@@ -658,6 +664,10 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
       batteryCompensation(&motorThrustUncapped, &motorThrustBatCompUncapped);
       powerDistributionCap(&motorThrustBatCompUncapped, &motorPwm);
       setMotorRatios(&motorPwm);
+      motor_cmd_float[0] = motorPwm.motors.m1/(float)UINT16_MAX;
+      motor_cmd_float[1] = motorPwm.motors.m2/(float)UINT16_MAX;
+      motor_cmd_float[2] = motorPwm.motors.m3/(float)UINT16_MAX;
+      motor_cmd_float[3] = motorPwm.motors.m4/(float)UINT16_MAX;
     }
   }
   else{
@@ -761,10 +771,10 @@ PARAM_GROUP_STOP(rlt)
 
 
 LOG_GROUP_START(rltm)
-LOG_ADD(LOG_UINT16, m1, &motor_cmd[0])
-LOG_ADD(LOG_UINT16, m2, &motor_cmd[1])
-LOG_ADD(LOG_UINT16, m3, &motor_cmd[2])
-LOG_ADD(LOG_UINT16, m4, &motor_cmd[3])
+LOG_ADD(LOG_FLOAT, m1, &motor_cmd_float[0])
+LOG_ADD(LOG_FLOAT, m2, &motor_cmd_float[1])
+LOG_ADD(LOG_FLOAT, m3, &motor_cmd_float[2])
+LOG_ADD(LOG_FLOAT, m4, &motor_cmd_float[3])
 LOG_GROUP_STOP(rltm)
 
 LOG_GROUP_START(rltrp)
