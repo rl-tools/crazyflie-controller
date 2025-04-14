@@ -306,14 +306,14 @@ void controllerOutOfTreeInit(void){
 }
 
 bool controllerOutOfTreeTest(void){
-  float output[4];
-  float absdiff = rl_tools_inference_applications_l2f_test(output);
+  RLtoolsInferenceApplicationsL2FAction output;
+  float absdiff = rl_tools_inference_applications_l2f_test(&output);
   if(absdiff < 0){
     absdiff = -absdiff;
   }
   DEBUG_PRINT("RLtools controller test, abs diff: %f\n", absdiff);
-  for(int i = 0; i < 4; i++){
-    DEBUG_PRINT("RLtools controller: Test action %d: %f\n", i, output[i]);
+  for(int i = 0; i < RL_TOOLS_INTERFACE_APPLICATIONS_L2F_ACTION_DIM; i++){
+    DEBUG_PRINT("RLtools controller: Test action %d: %f\n", i, output.action[i]);
   }
   if(absdiff > 0.2){
     return false;
