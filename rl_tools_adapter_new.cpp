@@ -1,4 +1,4 @@
-#define RL_TOOLS_DISABLE_TEST
+// #define RL_TOOLS_DISABLE_TEST
 #include "rl_tools_adapter_new.h"
 #ifdef RL_TOOLS_ENABLE_DEBUGGING_POOL
 char rl_tools_debugging_pool_names[RL_TOOLS_DEBUGGING_POOL_NUMBER][RL_TOOLS_DEBUGGING_POOL_NAME_LENGTH];

@@ -15,12 +15,16 @@ brew install libusb
 
 
 ### build
-```
+<!-- ```
 cd external/firmware
 make cf2_defconfig
 cd ../../
 make
-```
+``` -->
+
+make cf2_defconfig
+make
+
 
 ### flash
 ```

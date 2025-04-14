@@ -15,7 +15,7 @@
 #include "controller_brescianini.h"
 #include "power_distribution.h"
 #ifdef NEW_RL_TOOLS_CONTROLLER
-#include "rl_tools_adapter_new.h"
+#include <rl_tools/inference/applications/l2f/c_interface.h>
 #else
 #include "rl_tools_adapter.h"
 #endif
@@ -37,6 +37,9 @@
 #define WAYPOINT_NAVIGATION_NUMBER_OF_POINTS (5)
 #define WARMUP_TIME (1000 * 500)
 #define DWT_CYCCNT  (*((volatile uint32_t*)0xE0001004))
+#define STATUS_MESSAGE_SIZE 256
+
+char status_message[STATUS_MESSAGE_SIZE];
 
 typedef enum ControllerState{
   STATE_RESET,
@@ -85,9 +88,9 @@ static uint8_t mellinger_enable_integrators;
 static uint8_t log_set_motors = 0;
 static float velocity_cmd_multiplier, velocity_cmd_p_term;
 #ifdef NEW_RL_TOOLS_CONTROLLER
-static RLtoolsStatus non_healthy_status;
+static RLtoolsInferenceExecutorStatus non_healthy_status_intermediate, non_healthy_status_native;
 #endif
-uint32_t non_healthy_status_count;
+uint32_t healthy_status_count_intermediate, non_healthy_status_count_intermediate, healthy_status_count_native, non_healthy_status_count_native;
 
 enum Mode{
   NORMAL = 0,
@@ -288,20 +291,23 @@ void controllerOutOfTreeInit(void){
   figure_eight_scale = 1;
   figure_eight_progress = 0;
   figure_eight_warmup_time = 2;
-  non_healthy_status_count = 0;
+  healthy_status_count_intermediate = 0;
+  non_healthy_status_count_intermediate = 0;
+  healthy_status_count_native = 0;
+  non_healthy_status_count_native = 0;
 
   controllerPidInit();
   controllerMellingerFirmwareInit();
   controllerINDIInit();
   controllerBrescianiniInit();
-  rl_tools_init();
+  rl_tools_inference_applications_l2f_init();
 
-  DEBUG_PRINT("RLtools controller init! Checkpoint: %s\n", rl_tools_get_checkpoint_name());
+  DEBUG_PRINT("RLtools controller init! Checkpoint: %s\n", rl_tools_inference_applications_l2f_checkpoint_name());
 }
 
 bool controllerOutOfTreeTest(void){
   float output[4];
-  float absdiff = rl_tools_test(output);
+  float absdiff = rl_tools_inference_applications_l2f_test(output);
   if(absdiff < 0){
     absdiff = -absdiff;
   }
@@ -429,7 +435,7 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
     controllerMellingerFirmwareInit();
     controllerINDIInit();
     // controllerMellingerFirmwareEnableIntegrators(MELLINGER_ENABLE_INTEGRATORS == 1);
-    rl_tools_reset();
+    rl_tools_inference_applications_l2f_reset();
     DEBUG_PRINT("Controller activated\n");
     switch(mode){
       case NORMAL:
@@ -575,7 +581,7 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
       int64_t before = usecTimestamp();
       uint32_t start_cycle = DWT->CYCCNT;
 #ifdef NEW_RL_TOOLS_CONTROLLER
-      RLtoolsObservation observation;
+      RLtoolsInferenceApplicationsL2FObservation observation;
       for(uint8_t i=0; i<4; i++){
         if(i < 3){
           observation.position[i] = state_input[i];
@@ -589,17 +595,35 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
           observation.previous_action[i] = action_output[i];
         }
       }
-      RLtoolsAction action;
-      RLtoolsStatus rlt_status;
-      rlt_status = rl_tools_control(before, &observation, &action);
-      if(!rl_tools_healthy(rlt_status)){
-        non_healthy_status = rlt_status;
-        non_healthy_status_count++;
+      RLtoolsInferenceApplicationsL2FAction action;
+      RLtoolsInferenceExecutorStatus rlt_status;
+      rlt_status = rl_tools_inference_applications_l2f_control(before * 1000, &observation, &action);
+      if(!rlt_status.OK){
+        if(rlt_status.source == RL_TOOLS_INFERENCE_EXECUTOR_STATUS_SOURCE_CONTROL){
+          if(rlt_status.step_type == RL_TOOLS_INFERENCE_EXECUTOR_STATUS_STEP_TYPE_INTERMEDIATE){
+            non_healthy_status_intermediate = rlt_status;
+            non_healthy_status_count_intermediate++;
+          }
+          else{
+            non_healthy_status_native = rlt_status;
+            non_healthy_status_count_native++;
+          }
+        }
+      }
+      else{
+        if(rlt_status.source == RL_TOOLS_INFERENCE_EXECUTOR_STATUS_SOURCE_CONTROL){
+          if(rlt_status.step_type == RL_TOOLS_INFERENCE_EXECUTOR_STATUS_STEP_TYPE_INTERMEDIATE){
+            healthy_status_count_intermediate++;
+          }
+          else{
+            healthy_status_count_native++;
+          }
+        }
       }
       for(uint8_t i=0; i<4; i++){
         action_output[i] = action.action[i];
       }
-      if(rlt_status & RL_TOOLS_STATUS_BIT_SOURCE_CONTROL){
+      if(rlt_status.source == RL_TOOLS_INFERENCE_EXECUTOR_STATUS_SOURCE_CONTROL){
         rlt_policy_tick++;
       }
 #else
@@ -608,17 +632,31 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
       uint32_t end_cycle = DWT->CYCCNT;
       uint32_t cycles = end_cycle - start_cycle;
       int64_t after = usecTimestamp();
-      if ((rlt_status & RL_TOOLS_STATUS_BIT_SOURCE_CONTROL) && rlt_policy_tick % 500 == 0){
+      if ((rlt_status.source == RL_TOOLS_INFERENCE_EXECUTOR_STATUS_SOURCE_CONTROL) && rlt_policy_tick % 500 == 0){
         DEBUG_PRINT("rl_tools_control took %lu cycles (%lldus)\n", cycles, after - before);
       }
       if((tick % (CONTROL_INTERVAL_MS * 1000) == 0)){
         #ifdef NEW_RL_TOOLS_CONTROLLER
-        if(non_healthy_status_count > 0){
-          DEBUG_PRINT("%d non healthy statii, latest: %s\n", non_healthy_status_count, rl_tools_get_status_message(non_healthy_status));
-          DEBUG_PRINT("bias control %f bias orig %f \n", rl_tools_get_timing_bias(false), rl_tools_get_timing_bias(true));
-          non_healthy_status_count = 0;
+        if(non_healthy_status_count_intermediate > 0){
+          rl_tools_inference_executor_status_message(non_healthy_status_intermediate, status_message, STATUS_MESSAGE_SIZE);
+          DEBUG_PRINT("%d / %d healty intermediate statii, latest: %s\n", healthy_status_count_intermediate, (healthy_status_count_intermediate + non_healthy_status_count_intermediate), status_message);
         }
-        DEBUG_PRINT("RLtools controller status %s\n", rl_tools_get_status_message(rlt_status));
+        else{
+          DEBUG_PRINT("%d healty intermediate statii\n", healthy_status_count_intermediate);
+        }
+        non_healthy_status_count_intermediate = 0;
+        healthy_status_count_intermediate = 0;
+        if(non_healthy_status_count_native > 0){
+          rl_tools_inference_executor_status_message(non_healthy_status_native, status_message, STATUS_MESSAGE_SIZE);
+          DEBUG_PRINT("%d / %d healty native statii, latest: %s\n", healthy_status_count_native, (healthy_status_count_native + non_healthy_status_count_native), status_message);
+        }
+        else{
+          DEBUG_PRINT("%d healty native statii\n", healthy_status_count_native);
+        }
+        non_healthy_status_count_native = 0;
+        healthy_status_count_native = 0;
+        rl_tools_inference_executor_status_message(rlt_status, status_message, STATUS_MESSAGE_SIZE);
+        DEBUG_PRINT("RLtools controller status %s\n", status_message);
         #endif
         if(controller_tick > 1000){
           #ifdef RL_TOOLS_ENABLE_DEBUGGING_POOL
