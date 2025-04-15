@@ -38,5 +38,5 @@ struct RL_TOOLS_INFERENCE_APPLICATIONS_L2F_CONFIG{
     static constexpr bool DYNAMIC_ALLOCATION = false;
 };
 
-// #define RL_TOOLS_DISABLE_TEST
+#define RL_TOOLS_DISABLE_TEST
 #include <rl_tools/inference/applications/l2f/c_backend.h>
