@@ -302,7 +302,7 @@ void controllerOutOfTreeInit(void){
   controllerBrescianiniInit();
   rl_tools_inference_applications_l2f_init();
 
-  DEBUG_PRINT("RLtools controller init! Checkpoint: %s\n", rl_tools_inference_applications_l2f_checkpoint_name());
+  DEBUG_PRINT("Checkpoint: %s\n", rl_tools_inference_applications_l2f_checkpoint_name());
 }
 
 bool controllerOutOfTreeTest(void){
@@ -350,10 +350,11 @@ static inline void every_1000ms(){
 #ifdef PRINT_RPY
   DEBUG_PRINT("rpy: %5.2f, %5.2f, %5.2f\n", attitude_rpy[0], attitude_rpy[1], attitude_rpy[2]);
 #endif
+  DEBUG_PRINT("Heap: %u bytes free\n", xPortGetFreeHeapSize());
 
-  DEBUG_PRINT("Last setpoint: x disposition/mode %f/%f/%d\n", last_setpoint.position.x, last_setpoint.velocity.x, last_setpoint.mode.x);
-  DEBUG_PRINT("Last setpoint: y disposition/mode %f/%f/%d\n", last_setpoint.position.y, last_setpoint.velocity.y, last_setpoint.mode.y);
-  DEBUG_PRINT("Last setpoint: z disposition/mode %f/%f/%d\n", last_setpoint.position.z, last_setpoint.velocity.z, last_setpoint.mode.z);
+  // DEBUG_PRINT("Last setpoint: x disposition/mode %f/%f/%d\n", last_setpoint.position.x, last_setpoint.velocity.x, last_setpoint.mode.x);
+  // DEBUG_PRINT("Last setpoint: y disposition/mode %f/%f/%d\n", last_setpoint.position.y, last_setpoint.velocity.y, last_setpoint.mode.y);
+  // DEBUG_PRINT("Last setpoint: z disposition/mode %f/%f/%d\n", last_setpoint.position.z, last_setpoint.velocity.z, last_setpoint.mode.z);
 }
 
 static inline void every_10000ms(){

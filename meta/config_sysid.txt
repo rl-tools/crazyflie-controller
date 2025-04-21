@@ -5,9 +5,6 @@ log   # file name
 on:fixedFrequency
 200     # frequency
 1     # mode (0: disabled, 1: synchronous stabilizer, 2: asynchronous)
-stateEstimate.px
-stateEstimate.py
-stateEstimate.pz
 acc.x
 acc.y
 acc.z
@@ -18,11 +15,13 @@ stateEstimate.qw
 stateEstimate.qx
 stateEstimate.qy
 stateEstimate.qz
-stateEstimate.vx
-stateEstimate.vy
-stateEstimate.vz
-rltm.m1
-rltm.m2
-rltm.m3
-rltm.m4
+# rltm.m1
+# rltm.m2
+# rltm.m3
+# rltm.m4
+motor.m1
+motor.m2
+motor.m3
+motor.m4
+pm.vbatMV
 rltrp.sm

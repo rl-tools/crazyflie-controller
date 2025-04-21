@@ -35,3 +35,8 @@ cfloader flash build/cf2.bin stm32-fw -w radio://0/80/2M
 DYLD_LIBRARY_PATH="/opt/homebrew/lib:$DYLD_LIBRARY_PATH" cfloader flash build/cf2.bin stm32-fw -w radio://0/80/2M
 DYLD_LIBRARY_PATH="/opt/homebrew/lib:$DYLD_LIBRARY_PATH" cfclient
 ```
+
+
+# MOCAP
+
+Please configure the `locSrv.ExtQuatStdDev` such that the yaw estimate is stable
