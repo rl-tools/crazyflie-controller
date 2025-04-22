@@ -311,9 +311,9 @@ bool controllerOutOfTreeTest(void){
   if(absdiff < 0){
     absdiff = -absdiff;
   }
-  DEBUG_PRINT("RLtools controller test, abs diff: %f\n", absdiff);
+  // DEBUG_PRINT("RLtools controller test, abs diff: %f\n", absdiff);
   for(int i = 0; i < RL_TOOLS_INTERFACE_APPLICATIONS_L2F_ACTION_DIM; i++){
-    DEBUG_PRINT("RLtools controller: Test action %d: %f\n", i, output.action[i]);
+    // DEBUG_PRINT("RLtools controller: Test action %d: %f\n", i, output.action[i]);
   }
   if(absdiff > 0.2){
     return false;
@@ -341,16 +341,16 @@ static void setMotorRatios(const motors_thrust_pwm_t* motorPwm)
 
 static inline void every_500ms(){
 #ifdef PRINT_TWIST
-  DEBUG_PRINT("tw.l: %5.2f, %5.2f, %5.2f tw.a: %5.2f, %5.2f, %5.2f\n", state_input[7], state_input[8], state_input[9], state_input[10], state_input[11], state_input[12]);
-  DEBUG_PRINT("q: %5.2f, %5.2f, %5.2f, %5.2f\n", state_input[3], state_input[4], state_input[5], state_input[6]);
+  // DEBUG_PRINT("tw.l: %5.2f, %5.2f, %5.2f tw.a: %5.2f, %5.2f, %5.2f\n", state_input[7], state_input[8], state_input[9], state_input[10], state_input[11], state_input[12]);
+  // DEBUG_PRINT("q: %5.2f, %5.2f, %5.2f, %5.2f\n", state_input[3], state_input[4], state_input[5], state_input[6]);
 #endif
 }
 
 static inline void every_1000ms(){
 #ifdef PRINT_RPY
-  DEBUG_PRINT("rpy: %5.2f, %5.2f, %5.2f\n", attitude_rpy[0], attitude_rpy[1], attitude_rpy[2]);
+  // DEBUG_PRINT("rpy: %5.2f, %5.2f, %5.2f\n", attitude_rpy[0], attitude_rpy[1], attitude_rpy[2]);
 #endif
-  DEBUG_PRINT("Heap: %u bytes free\n", xPortGetFreeHeapSize());
+  // DEBUG_PRINT("Heap: %u bytes free\n", xPortGetFreeHeapSize());
 
   // DEBUG_PRINT("Last setpoint: x disposition/mode %f/%f/%d\n", last_setpoint.position.x, last_setpoint.velocity.x, last_setpoint.mode.x);
   // DEBUG_PRINT("Last setpoint: y disposition/mode %f/%f/%d\n", last_setpoint.position.y, last_setpoint.velocity.y, last_setpoint.mode.y);
@@ -358,7 +358,7 @@ static inline void every_1000ms(){
 }
 
 static inline void every_10000ms(){
-  DEBUG_PRINT("control invocation interval %f\n", (double)control_invocation_interval);
+  // DEBUG_PRINT("control invocation interval %f\n", (double)control_invocation_interval);
 }
 
 static inline void trigger_every(uint64_t controller_tick){
@@ -634,30 +634,30 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
       uint32_t cycles = end_cycle - start_cycle;
       int64_t after = usecTimestamp();
       if ((rlt_status.source == RL_TOOLS_INFERENCE_EXECUTOR_STATUS_SOURCE_CONTROL) && rlt_policy_tick % 500 == 0){
-        DEBUG_PRINT("rl_tools_control took %lu cycles (%lldus)\n", cycles, after - before);
+        // DEBUG_PRINT("rl_tools_control took %lu cycles (%lldus)\n", cycles, after - before);
       }
       if((tick % (CONTROL_INTERVAL_MS * 1000) == 0)){
         #ifdef NEW_RL_TOOLS_CONTROLLER
         if(non_healthy_status_count_intermediate > 0){
           rl_tools_inference_executor_status_message(non_healthy_status_intermediate, status_message, STATUS_MESSAGE_SIZE);
-          DEBUG_PRINT("%d / %d healty intermediate statii, latest: %s\n", healthy_status_count_intermediate, (healthy_status_count_intermediate + non_healthy_status_count_intermediate), status_message);
+          // DEBUG_PRINT("%d / %d healty intermediate statii, latest: %s\n", healthy_status_count_intermediate, (healthy_status_count_intermediate + non_healthy_status_count_intermediate), status_message);
         }
         else{
-          DEBUG_PRINT("%d healty intermediate statii\n", healthy_status_count_intermediate);
+          // DEBUG_PRINT("%d healty intermediate statii\n", healthy_status_count_intermediate);
         }
         non_healthy_status_count_intermediate = 0;
         healthy_status_count_intermediate = 0;
         if(non_healthy_status_count_native > 0){
           rl_tools_inference_executor_status_message(non_healthy_status_native, status_message, STATUS_MESSAGE_SIZE);
-          DEBUG_PRINT("%d / %d healty native statii, latest: %s\n", healthy_status_count_native, (healthy_status_count_native + non_healthy_status_count_native), status_message);
+          // DEBUG_PRINT("%d / %d healty native statii, latest: %s\n", healthy_status_count_native, (healthy_status_count_native + non_healthy_status_count_native), status_message);
         }
         else{
-          DEBUG_PRINT("%d healty native statii\n", healthy_status_count_native);
+          // DEBUG_PRINT("%d healty native statii\n", healthy_status_count_native);
         }
         non_healthy_status_count_native = 0;
         healthy_status_count_native = 0;
         rl_tools_inference_executor_status_message(rlt_status, status_message, STATUS_MESSAGE_SIZE);
-        DEBUG_PRINT("RLtools controller status %s\n", status_message);
+        // DEBUG_PRINT("RLtools controller status %s\n", status_message);
         #endif
         if(controller_tick > 1000){
           #ifdef RL_TOOLS_ENABLE_DEBUGGING_POOL
@@ -674,7 +674,7 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
     }
     for(uint8_t i=0; i<4; i++){
       if (tick % (CONTROL_INTERVAL_MS * 1000) == 0){
-        DEBUG_PRINT("action_output[%d]: %f\n", i, action_output[i]);
+        // DEBUG_PRINT("action_output[%d]: %f\n", i, action_output[i]);
       }
       float a_pp = (action_output[i] + 1)/2;
       float des_rpm = (MAX_RPM - MIN_RPM) * a_pp + MIN_RPM;
@@ -687,7 +687,7 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
     }
     int64_t spare_time = CONTROL_INTERVAL_US - (now - timestamp_last_reset) ;
     if(spare_time < 0 && (now - timestamp_last_behind_schedule_message > BEHIND_SCHEDULE_MESSAGE_MIN_INTERVAL)){
-      DEBUG_PRINT("Learned Controller is behind schedule: %lldus/%dus\n", (int64_t)(now-timestamp_last_reset), CONTROL_INTERVAL_US);
+      // DEBUG_PRINT("Learned Controller is behind schedule: %lldus/%dus\n", (int64_t)(now-timestamp_last_reset), CONTROL_INTERVAL_US);
       timestamp_last_behind_schedule_message = now;
     }
     timestamp_last_reset = usecTimestamp();
