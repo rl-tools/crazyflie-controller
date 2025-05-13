@@ -303,6 +303,19 @@ void controllerOutOfTreeInit(void){
 }
 
 bool controllerOutOfTreeTest(void){
+  RLtoolsInferenceApplicationsL2FAction test_output;
+  float test_absdiff = rl_tools_inference_applications_l2f_test(&test_output);
+  if(test_absdiff < 0){
+    test_absdiff = -test_absdiff;
+  }
+  // printing here in 2025.2 is deadly for some reason (deferred to the first control invocation)
+  if(test_absdiff > 0.2){
+    return false;
+  }
+  DEBUG_PRINT("RLtools controller test, abs diff: %f\n", test_absdiff);
+  for(int i = 0; i < RL_TOOLS_INTERFACE_APPLICATIONS_L2F_ACTION_DIM; i++){
+    DEBUG_PRINT("RLtools controller: Test action %d: %f\n", i, test_output.action[i]);
+  }
   return controllerPidTest() && controllerMellingerFirmwareTest() && controllerINDITest() && controllerBrescianiniTest();
 }
 
@@ -389,22 +402,7 @@ void debugging_pool_print(){
 
 void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorData_t *sensors, const state_t *state, const uint32_t tick) {
 
-  if(controller_tick > 1000){
-    if(controller_tick == 10333){
-      RLtoolsInferenceApplicationsL2FAction test_output;
-      float test_absdiff = rl_tools_inference_applications_l2f_test(&test_output);
-      if(test_absdiff < 0){
-        test_absdiff = -test_absdiff;
-      }
-      // printing here in 2025.2 is deadly for some reason (deferred to the first control invocation)
-      if(test_absdiff > 0.2){
-        return false;
-      }
-      DEBUG_PRINT("RLtools controller test, abs diff: %f\n", test_absdiff);
-      for(int i = 0; i < RL_TOOLS_INTERFACE_APPLICATIONS_L2F_ACTION_DIM; i++){
-        DEBUG_PRINT("RLtools controller: Test action %d: %f\n", i, test_output.action[i]);
-      }
-    }
+  if(true || controller_tick > 1000){
     uint64_t now = usecTimestamp();
     if(setpoint->mode.x == modeVelocity && setpoint->mode.y == modeVelocity){
       timestamp_last_control_packet_received_hover = now;
