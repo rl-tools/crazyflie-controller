@@ -434,7 +434,7 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
     controllerMellingerFirmwareInit();
     controllerINDIInit();
     // controllerMellingerFirmwareEnableIntegrators(MELLINGER_ENABLE_INTEGRATORS == 1);
-    // rl_tools_inference_applications_l2f_reset();
+    rl_tools_inference_applications_l2f_reset();
     DEBUG_PRINT("Controller activated\n");
     switch(mode){
       case NORMAL:
