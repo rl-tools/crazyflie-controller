@@ -401,379 +401,376 @@ void debugging_pool_print(){
 
 void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorData_t *sensors, const state_t *state, const uint32_t tick) {
 
-  if(true || controller_tick > 1000){
-    uint64_t now = usecTimestamp();
-    if(setpoint->mode.x == modeVelocity && setpoint->mode.y == modeVelocity){
-      timestamp_last_control_packet_received_hover = now;
-    }
+  uint64_t now = usecTimestamp();
+  if(setpoint->mode.x == modeVelocity && setpoint->mode.y == modeVelocity){
+    timestamp_last_control_packet_received_hover = now;
+  }
 
-    last_setpoint = *setpoint;
-    watchdogReset();
-    control_invocation_interval *= CONTROL_INVOCATION_INTERVAL_ALPHA;
-    control_invocation_interval += (1-CONTROL_INVOCATION_INTERVAL_ALPHA) * (now - timestamp_last_control_invocation);
-    timestamp_last_control_invocation = now;
-    uint64_t relevant_timestamp_last_control_packet_received = trigger_mode == RL_TOOLS_PACKET ? timestamp_last_control_packet_received : timestamp_last_control_packet_received_hover;
-    bool pre_set_motors = (now - relevant_timestamp_last_control_packet_received < CONTROL_PACKET_TIMEOUT_USEC)  || (set_motors_overwrite == 1 && motor_cmd_divider >= 3);
-    bool set_motors = false;
+  last_setpoint = *setpoint;
+  watchdogReset();
+  control_invocation_interval *= CONTROL_INVOCATION_INTERVAL_ALPHA;
+  control_invocation_interval += (1-CONTROL_INVOCATION_INTERVAL_ALPHA) * (now - timestamp_last_control_invocation);
+  timestamp_last_control_invocation = now;
+  uint64_t relevant_timestamp_last_control_packet_received = trigger_mode == RL_TOOLS_PACKET ? timestamp_last_control_packet_received : timestamp_last_control_packet_received_hover;
+  bool pre_set_motors = (now - relevant_timestamp_last_control_packet_received < CONTROL_PACKET_TIMEOUT_USEC)  || (set_motors_overwrite == 1 && motor_cmd_divider >= 3);
+  bool set_motors = false;
 
-    if(!prev_pre_set_motors && pre_set_motors){
-      timestamp_pre_set_motors = now;
-    }
-    set_motors = pre_set_motors && (((now - timestamp_pre_set_motors) > WARMUP_TIME) || use_pre_set_warmup == 0);
+  if(!prev_pre_set_motors && pre_set_motors){
+    timestamp_pre_set_motors = now;
+  }
+  set_motors = pre_set_motors && (((now - timestamp_pre_set_motors) > WARMUP_TIME) || use_pre_set_warmup == 0);
 
-    log_set_motors = set_motors ? 1 : 0;
-    // set_rl_tools_overwrite_stabilizer(set_motors);
-    if(!prev_set_motors && set_motors){
-      waypoint_navigation_timestamp_start = now;
-      timestamp_controller_activation = now;
-      waypoint_navigation_dynamic_current_waypoint = 0;
-      origin[0] = state->position.x;
-      origin[1] = state->position.y;
-      origin[2] = state->position.z + (mode == FIGURE_EIGHT ? target_height_figure_eight : target_height);
-      figure_eight_last_invocation = now;
-      figure_eight_progress = 0;
-      controllerMellingerFirmwareInit();
-      controllerINDIInit();
-      // controllerMellingerFirmwareEnableIntegrators(MELLINGER_ENABLE_INTEGRATORS == 1);
-      // rl_tools_inference_applications_l2f_reset();
-      DEBUG_PRINT("Controller activated\n");
-      switch(mode){
-        case NORMAL:
-          DEBUG_PRINT("NORMAL mode \n");
-          DEBUG_PRINT("\t x mode: "); print_mode(setpoint->mode.x);
-          DEBUG_PRINT("\t y mode: "); print_mode(setpoint->mode.y);
-          DEBUG_PRINT("\t z mode: "); print_mode(setpoint->mode.z);
-          break;
-        case POSITION:
-          DEBUG_PRINT("POSITION mode\n");
-          break;
-        case WAYPOINT_NAVIGATION:
-          DEBUG_PRINT("WAYPOINT_NAVIGATION mode\n");
-          break;
-        case WAYPOINT_NAVIGATION_DYNAMIC:
-          DEBUG_PRINT("WAYPOINT_NAVIGATION_DYNAMIC mode\n");
-          break;
-        case FIGURE_EIGHT:
-          DEBUG_PRINT("FIGURE_EIGHT mode\n");
-          break;
-      }
-    }
-    if(prev_set_motors && !set_motors){
-      DEBUG_PRINT("Controller deactivated\n");
-      for(uint8_t i=0; i<4; i++){
-        motorsSetRatio(motors[i], 0);
-      }
-    }
-    relative_pos[0] = state->position.x - origin[0];
-    relative_pos[1] = state->position.y - origin[1];
-    relative_pos[2] = state->position.z - origin[2];
-    target_vel[0] = 0;
-    target_vel[1] = 0;
-    target_vel[2] = 0;
+  log_set_motors = set_motors ? 1 : 0;
+  // set_rl_tools_overwrite_stabilizer(set_motors);
+  if(!prev_set_motors && set_motors){
+    waypoint_navigation_timestamp_start = now;
+    timestamp_controller_activation = now;
+    waypoint_navigation_dynamic_current_waypoint = 0;
+    origin[0] = state->position.x;
+    origin[1] = state->position.y;
+    origin[2] = state->position.z + (mode == FIGURE_EIGHT ? target_height_figure_eight : target_height);
+    figure_eight_last_invocation = now;
+    figure_eight_progress = 0;
+    controllerMellingerFirmwareInit();
+    controllerINDIInit();
+    // controllerMellingerFirmwareEnableIntegrators(MELLINGER_ENABLE_INTEGRATORS == 1);
+    // rl_tools_inference_applications_l2f_reset();
+    DEBUG_PRINT("Controller activated\n");
     switch(mode){
       case NORMAL:
-        switch(setpoint->mode.x){
-          case modeAbs:
-          target_pos[0] = setpoint->position.x;
-          target_vel[0] = 0;
-          break;
-          case modeVelocity:
-          target_pos[0] = state->position.x - setpoint->velocity.x * velocity_cmd_p_term;
-          target_vel[0] = setpoint->velocity.x * velocity_cmd_multiplier;
-          break;
-          case modeDisable:
-          target_pos[0] = origin[0];
-          target_vel[0] = 0;
-          break;
-        }
-        switch(setpoint->mode.y){
-          case modeAbs:
-          target_pos[1] = setpoint->position.y;
-          target_vel[1] = 0;
-          break;
-          case modeVelocity:
-          target_pos[1] = state->position.y - setpoint->velocity.y * velocity_cmd_p_term;
-          target_vel[1] = setpoint->velocity.y * velocity_cmd_multiplier;
-          break;
-          case modeDisable:
-          target_pos[1] = origin[1];
-          target_vel[1] = 0;
-          break;
-        }
-        switch(setpoint->mode.z){
-          case modeAbs:
-          target_pos[2] = setpoint->position.z;
-          target_vel[2] = 0;
-          break;
-          case modeVelocity:
-          target_pos[2] = state->position.z - setpoint->velocity.z * velocity_cmd_p_term;
-          target_vel[2] = setpoint->velocity.z * velocity_cmd_multiplier;
-          break;
-          case modeDisable:
-          target_pos[2] = origin[2];
-          target_vel[2] = 0;
-          break;
-        }
-      break;
+        DEBUG_PRINT("NORMAL mode \n");
+        DEBUG_PRINT("\t x mode: "); print_mode(setpoint->mode.x);
+        DEBUG_PRINT("\t y mode: "); print_mode(setpoint->mode.y);
+        DEBUG_PRINT("\t z mode: "); print_mode(setpoint->mode.z);
+        break;
       case POSITION:
-        target_pos[0] = origin[0];
-        target_pos[1] = origin[1];
-        target_pos[2] = origin[2];
+        DEBUG_PRINT("POSITION mode\n");
         break;
       case WAYPOINT_NAVIGATION:
-      {
-        uint64_t elapsed_since_start = (now-waypoint_navigation_timestamp_start);
-        int current_point = (elapsed_since_start / ((int)(waypoint_navigation_point_duration * 1000 * 1000))) % WAYPOINT_NAVIGATION_NUMBER_OF_POINTS;
-        target_pos[0] = trajectory[current_point][0] * waypoint_navigation_trajectory_scale + origin[0];
-        target_pos[1] = trajectory[current_point][1] * waypoint_navigation_trajectory_scale + origin[1];
-        target_pos[2] = trajectory[current_point][2] * waypoint_navigation_trajectory_scale + origin[2];
-      }
+        DEBUG_PRINT("WAYPOINT_NAVIGATION mode\n");
         break;
       case WAYPOINT_NAVIGATION_DYNAMIC:
-        {
-          float x = trajectory[waypoint_navigation_dynamic_current_waypoint][0] - relative_pos[0];
-          float y = trajectory[waypoint_navigation_dynamic_current_waypoint][1] - relative_pos[1];
-          float z = trajectory[waypoint_navigation_dynamic_current_waypoint][2] - relative_pos[2];
-
-          float current_dist = sqrtf(x*x + y*y + z*z);
-          if(current_dist < waypoint_navigation_dynamic_threshold){
-            waypoint_navigation_dynamic_current_waypoint = (waypoint_navigation_dynamic_current_waypoint + 1) % WAYPOINT_NAVIGATION_NUMBER_OF_POINTS;
-            DEBUG_PRINT("Next waypoint %d, [%f, %f, %f]\n", waypoint_navigation_dynamic_current_waypoint, trajectory[waypoint_navigation_dynamic_current_waypoint][0], trajectory[waypoint_navigation_dynamic_current_waypoint][1], trajectory[waypoint_navigation_dynamic_current_waypoint][2]);
-          }
-          target_pos[0] = origin[0] + trajectory[waypoint_navigation_dynamic_current_waypoint][0];
-          target_pos[1] = origin[1] + trajectory[waypoint_navigation_dynamic_current_waypoint][1];
-          target_pos[2] = origin[2] + trajectory[waypoint_navigation_dynamic_current_waypoint][2];
-          target_vel[0] = x / current_dist * waypoint_navigation_target_vel;
-          target_vel[1] = y / current_dist * waypoint_navigation_target_vel;
-          target_vel[2] = z / current_dist * waypoint_navigation_target_vel;
-        }
+        DEBUG_PRINT("WAYPOINT_NAVIGATION_DYNAMIC mode\n");
         break;
       case FIGURE_EIGHT:
-        {
-          float t = (now - timestamp_controller_activation) / 1000000.0f;
-          float dt = (now - figure_eight_last_invocation) / 1000000.0f;
-          float target_speed = 1/figure_eight_interval;
-          float speed = target_speed;
-          if(t < figure_eight_warmup_time){
-            speed = target_speed * t/figure_eight_warmup_time;
-          }
-          figure_eight_progress += dt * speed;
-          float progress = figure_eight_progress;
-          target_pos[0] = origin[0] + cosf(progress*2*M_PI + M_PI / 2) * figure_eight_scale;
-          target_vel[0] = -sinf(progress*2*M_PI + M_PI / 2) * figure_eight_scale * 2 * M_PI * speed;
-          target_pos[1] = origin[1] + sinf(2*(progress*2*M_PI + M_PI / 2)) / 2.0f * figure_eight_scale;
-          target_vel[1] = cosf(2*(progress*2*M_PI + M_PI / 2)) / 2.0f * figure_eight_scale * 4 * M_PI * speed;
-          target_pos[2] = origin[2];
-          figure_eight_last_invocation = now;
-        }
+        DEBUG_PRINT("FIGURE_EIGHT mode\n");
         break;
     }
-    pos_error[0] = target_pos[0] - state->position.x;
-    pos_error[1] = target_pos[1] - state->position.y;
-    pos_error[2] = target_pos[2] - state->position.z;
-
-    trigger_every(controller_tick);
-    prev_set_motors = set_motors;
-    prev_pre_set_motors = pre_set_motors;
-
-      update_state(sensors, state);
+  }
+  if(prev_set_motors && !set_motors){
+    DEBUG_PRINT("Controller deactivated\n");
+    for(uint8_t i=0; i<4; i++){
+      motorsSetRatio(motors[i], 0);
+    }
+  }
+  relative_pos[0] = state->position.x - origin[0];
+  relative_pos[1] = state->position.y - origin[1];
+  relative_pos[2] = state->position.z - origin[2];
+  target_vel[0] = 0;
+  target_vel[1] = 0;
+  target_vel[2] = 0;
+  switch(mode){
+    case NORMAL:
+      switch(setpoint->mode.x){
+        case modeAbs:
+        target_pos[0] = setpoint->position.x;
+        target_vel[0] = 0;
+        break;
+        case modeVelocity:
+        target_pos[0] = state->position.x - setpoint->velocity.x * velocity_cmd_p_term;
+        target_vel[0] = setpoint->velocity.x * velocity_cmd_multiplier;
+        break;
+        case modeDisable:
+        target_pos[0] = origin[0];
+        target_vel[0] = 0;
+        break;
+      }
+      switch(setpoint->mode.y){
+        case modeAbs:
+        target_pos[1] = setpoint->position.y;
+        target_vel[1] = 0;
+        break;
+        case modeVelocity:
+        target_pos[1] = state->position.y - setpoint->velocity.y * velocity_cmd_p_term;
+        target_vel[1] = setpoint->velocity.y * velocity_cmd_multiplier;
+        break;
+        case modeDisable:
+        target_pos[1] = origin[1];
+        target_vel[1] = 0;
+        break;
+      }
+      switch(setpoint->mode.z){
+        case modeAbs:
+        target_pos[2] = setpoint->position.z;
+        target_vel[2] = 0;
+        break;
+        case modeVelocity:
+        target_pos[2] = state->position.z - setpoint->velocity.z * velocity_cmd_p_term;
+        target_vel[2] = setpoint->velocity.z * velocity_cmd_multiplier;
+        break;
+        case modeDisable:
+        target_pos[2] = origin[2];
+        target_vel[2] = 0;
+        break;
+      }
+    break;
+    case POSITION:
+      target_pos[0] = origin[0];
+      target_pos[1] = origin[1];
+      target_pos[2] = origin[2];
+      break;
+    case WAYPOINT_NAVIGATION:
+    {
+      uint64_t elapsed_since_start = (now-waypoint_navigation_timestamp_start);
+      int current_point = (elapsed_since_start / ((int)(waypoint_navigation_point_duration * 1000 * 1000))) % WAYPOINT_NAVIGATION_NUMBER_OF_POINTS;
+      target_pos[0] = trajectory[current_point][0] * waypoint_navigation_trajectory_scale + origin[0];
+      target_pos[1] = trajectory[current_point][1] * waypoint_navigation_trajectory_scale + origin[1];
+      target_pos[2] = trajectory[current_point][2] * waypoint_navigation_trajectory_scale + origin[2];
+    }
+      break;
+    case WAYPOINT_NAVIGATION_DYNAMIC:
       {
-        int64_t before = usecTimestamp();
-        uint32_t start_cycle = DWT->CYCCNT;
-  #ifdef NEW_RL_TOOLS_CONTROLLER
-        RLtoolsInferenceApplicationsL2FObservation observation;
-        for(uint8_t i=0; i<4; i++){
-          if(i < 3){
-            observation.position[i] = state_input[i];
-            observation.orientation[i] = state_input[3+i];
-            observation.linear_velocity[i] = state_input[3+4+i];
-            observation.angular_velocity[i] = state_input[3+4+3+i];
-            observation.previous_action[i] = action_output[i];
-          }
-          else{
-            observation.orientation[i] = state_input[3+i];
-            observation.previous_action[i] = action_output[i];
-          }
+        float x = trajectory[waypoint_navigation_dynamic_current_waypoint][0] - relative_pos[0];
+        float y = trajectory[waypoint_navigation_dynamic_current_waypoint][1] - relative_pos[1];
+        float z = trajectory[waypoint_navigation_dynamic_current_waypoint][2] - relative_pos[2];
+
+        float current_dist = sqrtf(x*x + y*y + z*z);
+        if(current_dist < waypoint_navigation_dynamic_threshold){
+          waypoint_navigation_dynamic_current_waypoint = (waypoint_navigation_dynamic_current_waypoint + 1) % WAYPOINT_NAVIGATION_NUMBER_OF_POINTS;
+          DEBUG_PRINT("Next waypoint %d, [%f, %f, %f]\n", waypoint_navigation_dynamic_current_waypoint, trajectory[waypoint_navigation_dynamic_current_waypoint][0], trajectory[waypoint_navigation_dynamic_current_waypoint][1], trajectory[waypoint_navigation_dynamic_current_waypoint][2]);
         }
-        RLtoolsInferenceApplicationsL2FAction action;
-        RLtoolsInferenceExecutorStatus rlt_status;
-        // rlt_status = rl_tools_inference_applications_l2f_control(before * 1000, &observation, &action);
-        if(!rlt_status.OK){
-          if(rlt_status.source == RL_TOOLS_INFERENCE_EXECUTOR_STATUS_SOURCE_CONTROL){
-            if(rlt_status.step_type == RL_TOOLS_INFERENCE_EXECUTOR_STATUS_STEP_TYPE_INTERMEDIATE){
-              non_healthy_status_intermediate = rlt_status;
-              non_healthy_status_count_intermediate++;
-            }
-            else{
-              non_healthy_status_native = rlt_status;
-              non_healthy_status_count_native++;
-            }
-          }
+        target_pos[0] = origin[0] + trajectory[waypoint_navigation_dynamic_current_waypoint][0];
+        target_pos[1] = origin[1] + trajectory[waypoint_navigation_dynamic_current_waypoint][1];
+        target_pos[2] = origin[2] + trajectory[waypoint_navigation_dynamic_current_waypoint][2];
+        target_vel[0] = x / current_dist * waypoint_navigation_target_vel;
+        target_vel[1] = y / current_dist * waypoint_navigation_target_vel;
+        target_vel[2] = z / current_dist * waypoint_navigation_target_vel;
+      }
+      break;
+    case FIGURE_EIGHT:
+      {
+        float t = (now - timestamp_controller_activation) / 1000000.0f;
+        float dt = (now - figure_eight_last_invocation) / 1000000.0f;
+        float target_speed = 1/figure_eight_interval;
+        float speed = target_speed;
+        if(t < figure_eight_warmup_time){
+          speed = target_speed * t/figure_eight_warmup_time;
+        }
+        figure_eight_progress += dt * speed;
+        float progress = figure_eight_progress;
+        target_pos[0] = origin[0] + cosf(progress*2*M_PI + M_PI / 2) * figure_eight_scale;
+        target_vel[0] = -sinf(progress*2*M_PI + M_PI / 2) * figure_eight_scale * 2 * M_PI * speed;
+        target_pos[1] = origin[1] + sinf(2*(progress*2*M_PI + M_PI / 2)) / 2.0f * figure_eight_scale;
+        target_vel[1] = cosf(2*(progress*2*M_PI + M_PI / 2)) / 2.0f * figure_eight_scale * 4 * M_PI * speed;
+        target_pos[2] = origin[2];
+        figure_eight_last_invocation = now;
+      }
+      break;
+  }
+  pos_error[0] = target_pos[0] - state->position.x;
+  pos_error[1] = target_pos[1] - state->position.y;
+  pos_error[2] = target_pos[2] - state->position.z;
+
+  trigger_every(controller_tick);
+  prev_set_motors = set_motors;
+  prev_pre_set_motors = pre_set_motors;
+
+    update_state(sensors, state);
+    {
+      int64_t before = usecTimestamp();
+      uint32_t start_cycle = DWT->CYCCNT;
+#ifdef NEW_RL_TOOLS_CONTROLLER
+      RLtoolsInferenceApplicationsL2FObservation observation;
+      for(uint8_t i=0; i<4; i++){
+        if(i < 3){
+          observation.position[i] = state_input[i];
+          observation.orientation[i] = state_input[3+i];
+          observation.linear_velocity[i] = state_input[3+4+i];
+          observation.angular_velocity[i] = state_input[3+4+3+i];
+          observation.previous_action[i] = action_output[i];
         }
         else{
-          if(rlt_status.source == RL_TOOLS_INFERENCE_EXECUTOR_STATUS_SOURCE_CONTROL){
-            if(rlt_status.step_type == RL_TOOLS_INFERENCE_EXECUTOR_STATUS_STEP_TYPE_INTERMEDIATE){
-              healthy_status_count_intermediate++;
-            }
-            else{
-              healthy_status_count_native++;
-            }
-          }
+          observation.orientation[i] = state_input[3+i];
+          observation.previous_action[i] = action_output[i];
         }
-        for(uint8_t i=0; i<4; i++){
-          action_output[i] = action.action[i];
-        }
+      }
+      RLtoolsInferenceApplicationsL2FAction action;
+      RLtoolsInferenceExecutorStatus rlt_status;
+      // rlt_status = rl_tools_inference_applications_l2f_control(before * 1000, &observation, &action);
+      if(!rlt_status.OK){
         if(rlt_status.source == RL_TOOLS_INFERENCE_EXECUTOR_STATUS_SOURCE_CONTROL){
-          rlt_policy_tick++;
-        }
-  #else
-        rl_tools_control(state_input, action_output);
-  #endif
-        uint32_t end_cycle = DWT->CYCCNT;
-        uint32_t cycles = end_cycle - start_cycle;
-        int64_t after = usecTimestamp();
-        if ((rlt_status.source == RL_TOOLS_INFERENCE_EXECUTOR_STATUS_SOURCE_CONTROL) && rlt_policy_tick % 500 == 0){
-          // DEBUG_PRINT("rl_tools_control took %lu cycles (%lldus)\n", cycles, after - before);
-        }
-        if((tick % (CONTROL_INTERVAL_MS * 1000) == 0)){
-          #ifdef NEW_RL_TOOLS_CONTROLLER
-          if(non_healthy_status_count_intermediate > 0){
-            rl_tools_inference_executor_status_message(non_healthy_status_intermediate, status_message, STATUS_MESSAGE_SIZE);
-            // DEBUG_PRINT("%d / %d healty intermediate statii, latest: %s\n", healthy_status_count_intermediate, (healthy_status_count_intermediate + non_healthy_status_count_intermediate), status_message);
+          if(rlt_status.step_type == RL_TOOLS_INFERENCE_EXECUTOR_STATUS_STEP_TYPE_INTERMEDIATE){
+            non_healthy_status_intermediate = rlt_status;
+            non_healthy_status_count_intermediate++;
           }
           else{
-            // DEBUG_PRINT("%d healty intermediate statii\n", healthy_status_count_intermediate);
+            non_healthy_status_native = rlt_status;
+            non_healthy_status_count_native++;
           }
-          non_healthy_status_count_intermediate = 0;
-          healthy_status_count_intermediate = 0;
-          if(non_healthy_status_count_native > 0){
-            rl_tools_inference_executor_status_message(non_healthy_status_native, status_message, STATUS_MESSAGE_SIZE);
-            // DEBUG_PRINT("%d / %d healty native statii, latest: %s\n", healthy_status_count_native, (healthy_status_count_native + non_healthy_status_count_native), status_message);
-          }
-          else{
-            // DEBUG_PRINT("%d healty native statii\n", healthy_status_count_native);
-          }
-          non_healthy_status_count_native = 0;
-          healthy_status_count_native = 0;
-          rl_tools_inference_executor_status_message(rlt_status, status_message, STATUS_MESSAGE_SIZE);
-          // DEBUG_PRINT("RLtools controller status %s\n", status_message);
-          #endif
-          if(controller_tick > 1000){
-            #ifdef RL_TOOLS_ENABLE_DEBUGGING_POOL
-            debugging_pool_print();
-            #endif
-          }
-        }
-        if(use_orig_controller != 0){
-          action_output[0] = -0.8;
-          action_output[1] = -0.8;
-          action_output[2] = -0.8;
-          action_output[3] = -0.8;
-        }
-      }
-      for(uint8_t i=0; i<4; i++){
-        if (tick % (CONTROL_INTERVAL_MS * 1000) == 0){
-          // DEBUG_PRINT("action_output[%d]: %f\n", i, action_output[i]);
-        }
-        float a_pp = (action_output[i] + 1)/2;
-        float des_rpm = (MAX_RPM - MIN_RPM) * a_pp + MIN_RPM;
-        float des_percentage = des_rpm / MAX_RPM;
-        motor_cmd_float[i] = des_percentage;
-        motor_cmd[i] = des_percentage * UINT16_MAX;
-        if(set_motors && use_orig_controller == 0){
-          motorsSetRatio(motors[i], clip((float)motor_cmd[i] / motor_cmd_divider, 0, UINT16_MAX));
-        }
-      }
-      int64_t spare_time = CONTROL_INTERVAL_US - (now - timestamp_last_reset) ;
-      if(spare_time < 0 && (now - timestamp_last_behind_schedule_message > BEHIND_SCHEDULE_MESSAGE_MIN_INTERVAL)){
-        // DEBUG_PRINT("Learned Controller is behind schedule: %lldus/%dus\n", (int64_t)(now-timestamp_last_reset), CONTROL_INTERVAL_US);
-        timestamp_last_behind_schedule_message = now;
-      }
-      timestamp_last_reset = usecTimestamp();
-    if(!set_motors){
-      if(pre_set_motors){
-        for(uint8_t i=0; i<4; i++){
-          motorsSetRatio(motors[i], UINT16_MAX / motor_cmd_divider_warmup);
         }
       }
       else{
-        controllerPid(control, setpoint, sensors, state, tick);
-        powerDistribution(control, &motorThrustUncapped);
-        batteryCompensation(&motorThrustUncapped, &motorThrustBatCompUncapped);
-        powerDistributionCap(&motorThrustBatCompUncapped, &motorPwm);
-        setMotorRatios(&motorPwm);
-        motor_cmd_float[0] = motorPwm.motors.m1/(float)UINT16_MAX;
-        motor_cmd_float[1] = motorPwm.motors.m2/(float)UINT16_MAX;
-        motor_cmd_float[2] = motorPwm.motors.m3/(float)UINT16_MAX;
-        motor_cmd_float[3] = motorPwm.motors.m4/(float)UINT16_MAX;
+        if(rlt_status.source == RL_TOOLS_INFERENCE_EXECUTOR_STATUS_SOURCE_CONTROL){
+          if(rlt_status.step_type == RL_TOOLS_INFERENCE_EXECUTOR_STATUS_STEP_TYPE_INTERMEDIATE){
+            healthy_status_count_intermediate++;
+          }
+          else{
+            healthy_status_count_native++;
+          }
+        }
+      }
+      for(uint8_t i=0; i<4; i++){
+        action_output[i] = action.action[i];
+      }
+      if(rlt_status.source == RL_TOOLS_INFERENCE_EXECUTOR_STATUS_SOURCE_CONTROL){
+        rlt_policy_tick++;
+      }
+#else
+      rl_tools_control(state_input, action_output);
+#endif
+      uint32_t end_cycle = DWT->CYCCNT;
+      uint32_t cycles = end_cycle - start_cycle;
+      int64_t after = usecTimestamp();
+      if ((rlt_status.source == RL_TOOLS_INFERENCE_EXECUTOR_STATUS_SOURCE_CONTROL) && rlt_policy_tick % 500 == 0){
+        // DEBUG_PRINT("rl_tools_control took %lu cycles (%lldus)\n", cycles, after - before);
+      }
+      if((tick % (CONTROL_INTERVAL_MS * 1000) == 0)){
+        #ifdef NEW_RL_TOOLS_CONTROLLER
+        if(non_healthy_status_count_intermediate > 0){
+          rl_tools_inference_executor_status_message(non_healthy_status_intermediate, status_message, STATUS_MESSAGE_SIZE);
+          // DEBUG_PRINT("%d / %d healty intermediate statii, latest: %s\n", healthy_status_count_intermediate, (healthy_status_count_intermediate + non_healthy_status_count_intermediate), status_message);
+        }
+        else{
+          // DEBUG_PRINT("%d healty intermediate statii\n", healthy_status_count_intermediate);
+        }
+        non_healthy_status_count_intermediate = 0;
+        healthy_status_count_intermediate = 0;
+        if(non_healthy_status_count_native > 0){
+          rl_tools_inference_executor_status_message(non_healthy_status_native, status_message, STATUS_MESSAGE_SIZE);
+          // DEBUG_PRINT("%d / %d healty native statii, latest: %s\n", healthy_status_count_native, (healthy_status_count_native + non_healthy_status_count_native), status_message);
+        }
+        else{
+          // DEBUG_PRINT("%d healty native statii\n", healthy_status_count_native);
+        }
+        non_healthy_status_count_native = 0;
+        healthy_status_count_native = 0;
+        rl_tools_inference_executor_status_message(rlt_status, status_message, STATUS_MESSAGE_SIZE);
+        // DEBUG_PRINT("RLtools controller status %s\n", status_message);
+        #endif
+        if(controller_tick > 1000){
+          #ifdef RL_TOOLS_ENABLE_DEBUGGING_POOL
+          debugging_pool_print();
+          #endif
+        }
+      }
+      if(use_orig_controller != 0){
+        action_output[0] = -0.8;
+        action_output[1] = -0.8;
+        action_output[2] = -0.8;
+        action_output[3] = -0.8;
+      }
+    }
+    for(uint8_t i=0; i<4; i++){
+      if (tick % (CONTROL_INTERVAL_MS * 1000) == 0){
+        // DEBUG_PRINT("action_output[%d]: %f\n", i, action_output[i]);
+      }
+      float a_pp = (action_output[i] + 1)/2;
+      float des_rpm = (MAX_RPM - MIN_RPM) * a_pp + MIN_RPM;
+      float des_percentage = des_rpm / MAX_RPM;
+      motor_cmd_float[i] = des_percentage;
+      motor_cmd[i] = des_percentage * UINT16_MAX;
+      if(set_motors && use_orig_controller == 0){
+        motorsSetRatio(motors[i], clip((float)motor_cmd[i] / motor_cmd_divider, 0, UINT16_MAX));
+      }
+    }
+    int64_t spare_time = CONTROL_INTERVAL_US - (now - timestamp_last_reset) ;
+    if(spare_time < 0 && (now - timestamp_last_behind_schedule_message > BEHIND_SCHEDULE_MESSAGE_MIN_INTERVAL)){
+      // DEBUG_PRINT("Learned Controller is behind schedule: %lldus/%dus\n", (int64_t)(now-timestamp_last_reset), CONTROL_INTERVAL_US);
+      timestamp_last_behind_schedule_message = now;
+    }
+    timestamp_last_reset = usecTimestamp();
+  if(!set_motors){
+    if(pre_set_motors){
+      for(uint8_t i=0; i<4; i++){
+        motorsSetRatio(motors[i], UINT16_MAX / motor_cmd_divider_warmup);
       }
     }
     else{
-      if(use_orig_controller >= 1){
-        setpoint->mode.x = modeAbs;
-        setpoint->mode.y = modeAbs;
-        setpoint->mode.z = modeAbs;
-        setpoint->mode.yaw = modeAbs;
-        setpoint->mode.pitch = modeDisable;
-        setpoint->mode.roll = modeDisable;
-        setpoint->mode.quat = modeDisable;
-        setpoint->position.x = target_pos[0];
-        setpoint->position.y = target_pos[1];
-        setpoint->position.z = target_pos[2];
-        setpoint->velocity.x = target_vel[0];
-        setpoint->velocity.y = target_vel[1];
-        setpoint->velocity.z = target_vel[2];
-        setpoint->acceleration.x = 0;
-        setpoint->acceleration.y = 0;
-        setpoint->acceleration.z = 0;
+      controllerPid(control, setpoint, sensors, state, tick);
+      powerDistribution(control, &motorThrustUncapped);
+      batteryCompensation(&motorThrustUncapped, &motorThrustBatCompUncapped);
+      powerDistributionCap(&motorThrustBatCompUncapped, &motorPwm);
+      setMotorRatios(&motorPwm);
+      motor_cmd_float[0] = motorPwm.motors.m1/(float)UINT16_MAX;
+      motor_cmd_float[1] = motorPwm.motors.m2/(float)UINT16_MAX;
+      motor_cmd_float[2] = motorPwm.motors.m3/(float)UINT16_MAX;
+      motor_cmd_float[3] = motorPwm.motors.m4/(float)UINT16_MAX;
+    }
+  }
+  else{
+    if(use_orig_controller >= 1){
+      setpoint->mode.x = modeAbs;
+      setpoint->mode.y = modeAbs;
+      setpoint->mode.z = modeAbs;
+      setpoint->mode.yaw = modeAbs;
+      setpoint->mode.pitch = modeDisable;
+      setpoint->mode.roll = modeDisable;
+      setpoint->mode.quat = modeDisable;
+      setpoint->position.x = target_pos[0];
+      setpoint->position.y = target_pos[1];
+      setpoint->position.z = target_pos[2];
+      setpoint->velocity.x = target_vel[0];
+      setpoint->velocity.y = target_vel[1];
+      setpoint->velocity.z = target_vel[2];
+      setpoint->acceleration.x = 0;
+      setpoint->acceleration.y = 0;
+      setpoint->acceleration.z = 0;
 
-        setpoint->attitude.yaw = 0;
-        setpoint->attitude.pitch = 0;
-        setpoint->attitude.roll = 0;
-        setpoint->attitudeQuaternion.w = 1;
-        setpoint->attitudeQuaternion.x = 0;
-        setpoint->attitudeQuaternion.y = 0;
-        setpoint->attitudeQuaternion.z = 0;
-        setpoint->attitudeRate.yaw = 0;
-        setpoint->attitudeRate.pitch = 0;
-        setpoint->attitudeRate.roll = 0;
+      setpoint->attitude.yaw = 0;
+      setpoint->attitude.pitch = 0;
+      setpoint->attitude.roll = 0;
+      setpoint->attitudeQuaternion.w = 1;
+      setpoint->attitudeQuaternion.x = 0;
+      setpoint->attitudeQuaternion.y = 0;
+      setpoint->attitudeQuaternion.z = 0;
+      setpoint->attitudeRate.yaw = 0;
+      setpoint->attitudeRate.pitch = 0;
+      setpoint->attitudeRate.roll = 0;
 
-        setpoint->timestamp = xTaskGetTickCount();
-        if(use_orig_controller == 1){
-          controllerPid(control, setpoint, sensors, state, tick);
+      setpoint->timestamp = xTaskGetTickCount();
+      if(use_orig_controller == 1){
+        controllerPid(control, setpoint, sensors, state, tick);
+      }
+      else{
+        if(use_orig_controller == 2){
+          setpoint->position.x = state->position.x + clip(target_pos[0] - state->position.x, -pos_distance_limit_mellinger, pos_distance_limit_mellinger);
+          setpoint->position.y = state->position.y + clip(target_pos[1] - state->position.y, -pos_distance_limit_mellinger, pos_distance_limit_mellinger);
+          setpoint->position.z = state->position.z + clip(target_pos[2] - state->position.z, -pos_distance_limit_mellinger, pos_distance_limit_mellinger);
+          setpoint->velocity.x = state->velocity.x + clip(target_vel[0] - state->velocity.x, -vel_distance_limit_mellinger, vel_distance_limit_mellinger);
+          setpoint->velocity.y = state->velocity.y + clip(target_vel[1] - state->velocity.y, -vel_distance_limit_mellinger, vel_distance_limit_mellinger);
+          setpoint->velocity.z = state->velocity.z + clip(target_vel[2] - state->velocity.z, -vel_distance_limit_mellinger, vel_distance_limit_mellinger);
+          controllerMellingerFirmware(control, setpoint, sensors, state, tick);
         }
         else{
-          if(use_orig_controller == 2){
-            setpoint->position.x = state->position.x + clip(target_pos[0] - state->position.x, -pos_distance_limit_mellinger, pos_distance_limit_mellinger);
-            setpoint->position.y = state->position.y + clip(target_pos[1] - state->position.y, -pos_distance_limit_mellinger, pos_distance_limit_mellinger);
-            setpoint->position.z = state->position.z + clip(target_pos[2] - state->position.z, -pos_distance_limit_mellinger, pos_distance_limit_mellinger);
-            setpoint->velocity.x = state->velocity.x + clip(target_vel[0] - state->velocity.x, -vel_distance_limit_mellinger, vel_distance_limit_mellinger);
-            setpoint->velocity.y = state->velocity.y + clip(target_vel[1] - state->velocity.y, -vel_distance_limit_mellinger, vel_distance_limit_mellinger);
-            setpoint->velocity.z = state->velocity.z + clip(target_vel[2] - state->velocity.z, -vel_distance_limit_mellinger, vel_distance_limit_mellinger);
-            controllerMellingerFirmware(control, setpoint, sensors, state, tick);
+          if(use_orig_controller == 3){
+            controllerINDI(control, setpoint, sensors, state, tick);
           }
           else{
-            if(use_orig_controller == 3){
-              controllerINDI(control, setpoint, sensors, state, tick);
-            }
-            else{
-              setpoint->position.x = state->position.x + clip(target_pos[0] - state->position.x, -pos_distance_limit_bresciani, pos_distance_limit_bresciani);
-              setpoint->position.y = state->position.y + clip(target_pos[1] - state->position.y, -pos_distance_limit_bresciani, pos_distance_limit_bresciani);
-              setpoint->position.z = state->position.z + clip(target_pos[2] - state->position.z, -pos_distance_limit_bresciani, pos_distance_limit_bresciani);
-              setpoint->velocity.x = state->velocity.x + clip(target_vel[0] - state->velocity.x, -vel_distance_limit_bresciani, vel_distance_limit_bresciani);
-              setpoint->velocity.y = state->velocity.y + clip(target_vel[1] - state->velocity.y, -vel_distance_limit_bresciani, vel_distance_limit_bresciani);
-              setpoint->velocity.z = state->velocity.z + clip(target_vel[2] - state->velocity.z, -vel_distance_limit_bresciani, vel_distance_limit_bresciani);
-              controllerBrescianini(control, setpoint, sensors, state, tick);
-            }
+            setpoint->position.x = state->position.x + clip(target_pos[0] - state->position.x, -pos_distance_limit_bresciani, pos_distance_limit_bresciani);
+            setpoint->position.y = state->position.y + clip(target_pos[1] - state->position.y, -pos_distance_limit_bresciani, pos_distance_limit_bresciani);
+            setpoint->position.z = state->position.z + clip(target_pos[2] - state->position.z, -pos_distance_limit_bresciani, pos_distance_limit_bresciani);
+            setpoint->velocity.x = state->velocity.x + clip(target_vel[0] - state->velocity.x, -vel_distance_limit_bresciani, vel_distance_limit_bresciani);
+            setpoint->velocity.y = state->velocity.y + clip(target_vel[1] - state->velocity.y, -vel_distance_limit_bresciani, vel_distance_limit_bresciani);
+            setpoint->velocity.z = state->velocity.z + clip(target_vel[2] - state->velocity.z, -vel_distance_limit_bresciani, vel_distance_limit_bresciani);
+            controllerBrescianini(control, setpoint, sensors, state, tick);
           }
         }
-        powerDistribution(control, &motorThrustUncapped);
-        batteryCompensation(&motorThrustUncapped, &motorThrustBatCompUncapped);
-        powerDistributionCap(&motorThrustBatCompUncapped, &motorPwm);
-        setMotorRatios(&motorPwm);
       }
+      powerDistribution(control, &motorThrustUncapped);
+      batteryCompensation(&motorThrustUncapped, &motorThrustBatCompUncapped);
+      powerDistributionCap(&motorThrustBatCompUncapped, &motorPwm);
+      setMotorRatios(&motorPwm);
     }
-
   }
   controller_tick++;
 }
