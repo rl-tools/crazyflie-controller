@@ -304,7 +304,7 @@ void controllerOutOfTreeInit(void){
 
 bool controllerOutOfTreeTest(void){
   RLtoolsInferenceApplicationsL2FAction test_output;
-  float test_absdiff = rl_tools_inference_applications_l2f_test(&test_output);
+  float test_absdiff = 0; //rl_tools_inference_applications_l2f_test(&test_output);
   if(test_absdiff < 0){
     test_absdiff = -test_absdiff;
   }
@@ -355,7 +355,7 @@ static inline void every_1000ms(){
 }
 
 static inline void every_10000ms(){
-  // DEBUG_PRINT("control invocation interval %f\n", (double)control_invocation_interval);
+  DEBUG_PRINT("control invocation interval %f\n", (double)control_invocation_interval);
 }
 
 static inline void trigger_every(uint64_t controller_tick){

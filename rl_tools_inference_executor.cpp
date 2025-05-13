@@ -7,6 +7,8 @@
 #include <rl_tools/nn_models/mlp/operations_generic.h>
 #include <rl_tools/nn_models/sequential/operations_generic.h>
 
+#include <rl_tools/inference/executor/executor.h>
+
 #include "data/actor_recurrent.h"
 
 namespace rlt = rl_tools;
@@ -30,12 +32,17 @@ struct RL_TOOLS_INFERENCE_APPLICATIONS_L2F_CONFIG{
         return rlt::checkpoint::actor::module;
     }
     static constexpr TI ACTION_HISTORY_LENGTH = 1;
-    static constexpr TI CONTROL_INTERVAL_INTERMEDIATE_NS = 2 * 1000 * 1000; // Inference is at 500hz
+    static constexpr TI CONTROL_INTERVAL_INTERMEDIATE_NS = 1 * 1000 * 1000; // Inference is at 500hz
     static constexpr TI CONTROL_INTERVAL_NATIVE_NS = 10 * 1000 * 1000; // Training is 100hz
     static constexpr TI TIMING_STATS_NUM_STEPS = 100;
-    static constexpr bool FORCE_SYNC_INTERMEDIATE = false;
-    static constexpr TI FORCE_SYNC_NATIVE = 0;
+    static constexpr bool FORCE_SYNC_INTERMEDIATE = true;
+    static constexpr TI FORCE_SYNC_NATIVE = 10;
     static constexpr bool DYNAMIC_ALLOCATION = false;
+    struct WARNING_LEVELS: rlt::inference::executor::WarningLevelsDefault<T>{
+        static constexpr T INTERMEDIATE_TIMING_JITTER_HIGH_THRESHOLD_NS = 1.25;
+        static constexpr T INTERMEDIATE_TIMING_JITTER_LOW_THRESHOLD_NS = 0.75;
+    };
+
 };
 
 // #define RL_TOOLS_DISABLE_TEST
