@@ -299,7 +299,7 @@ void controllerOutOfTreeInit(void){
   controllerBrescianiniInit();
   rl_tools_inference_applications_l2f_init();
 
-  // DEBUG_PRINT("Checkpoint: %s\n", rl_tools_inference_applications_l2f_checkpoint_name());
+  DEBUG_PRINT("Checkpoint: %s\n", rl_tools_inference_applications_l2f_checkpoint_name());
 }
 
 bool controllerOutOfTreeTest(void){
