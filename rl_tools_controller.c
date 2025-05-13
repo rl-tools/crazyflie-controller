@@ -221,86 +221,83 @@ void rl_tools_controller_packet_received(){
 
 
 void controllerOutOfTreeInit(void){
-  // CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
-  // DWT->CYCCNT = 0;
-  // DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
 
-  // controller_state = STATE_RESET;
-  // controller_tick = 0;
-  // rlt_policy_tick = 0;
-  // motor_cmd_divider = 1.0;
-  // motor_cmd_divider_warmup = 7.0;
+  controller_state = STATE_RESET;
+  controller_tick = 0;
+  rlt_policy_tick = 0;
+  motor_cmd_divider = 1.0;
+  motor_cmd_divider_warmup = 7.0;
 
-  // motor_cmd[0] = 0;
-  // motor_cmd[1] = 0;
-  // motor_cmd[2] = 0;
-  // motor_cmd[3] = 0;
-  // motor_cmd_float[0] = 0;
-  // motor_cmd_float[1] = 0;
-  // motor_cmd_float[2] = 0;
-  // motor_cmd_float[3] = 0;
-  // timestamp_last_reset = usecTimestamp();
-  // prev_set_motors = false;
-  // prev_pre_set_motors = false;
-  // use_pre_set_warmup = 0;
-  // timestamp_last_control_packet_received = 0;
-  // timestamp_last_control_packet_received_hover = 0;
-  // timestamp_last_behind_schedule_message = 0;
-  // control_invocation_interval = 0;
-  // forward_tick = 0;
-  // hand_test = 0;
-  // waypoint_navigation_timestamp_start = 0;
-  // waypoint_navigation_trajectory_scale = 0.5;
-  // relative_pos[0] = 0;
-  // relative_pos[1] = 0;
-  // relative_pos[2] = 0;
-  // log_set_motors = 0;
+  motor_cmd[0] = 0;
+  motor_cmd[1] = 0;
+  motor_cmd[2] = 0;
+  motor_cmd[3] = 0;
+  motor_cmd_float[0] = 0;
+  motor_cmd_float[1] = 0;
+  motor_cmd_float[2] = 0;
+  motor_cmd_float[3] = 0;
+  timestamp_last_reset = usecTimestamp();
+  prev_set_motors = false;
+  prev_pre_set_motors = false;
+  use_pre_set_warmup = 0;
+  timestamp_last_control_packet_received = 0;
+  timestamp_last_control_packet_received_hover = 0;
+  timestamp_last_behind_schedule_message = 0;
+  control_invocation_interval = 0;
+  forward_tick = 0;
+  hand_test = 0;
+  waypoint_navigation_timestamp_start = 0;
+  waypoint_navigation_trajectory_scale = 0.5;
+  relative_pos[0] = 0;
+  relative_pos[1] = 0;
+  relative_pos[2] = 0;
+  log_set_motors = 0;
   
-  // waypoint_navigation_target_vel = 0.0;
+  waypoint_navigation_target_vel = 0.0;
 
-  // pos_distance_limit_position = 0.5f;
-  // vel_distance_limit_position = 2.0f;
-  // pos_distance_limit_figure_eight = 0.6f;
-  // vel_distance_limit_figure_eight = 2.0f;
-  // pos_distance_limit_mellinger = 0.2f;
-  // vel_distance_limit_mellinger = 1.0f;
-  // pos_distance_limit_bresciani = 0.2f;
-  // vel_distance_limit_bresciani = 1.0f;
-  // mellinger_enable_integrators = 1;
-  // velocity_cmd_multiplier = 1;
-  // velocity_cmd_p_term = 0.0;
+  pos_distance_limit_position = 0.5f;
+  vel_distance_limit_position = 2.0f;
+  pos_distance_limit_figure_eight = 0.6f;
+  vel_distance_limit_figure_eight = 2.0f;
+  pos_distance_limit_mellinger = 0.2f;
+  vel_distance_limit_mellinger = 1.0f;
+  pos_distance_limit_bresciani = 0.2f;
+  vel_distance_limit_bresciani = 1.0f;
+  mellinger_enable_integrators = 1;
+  velocity_cmd_multiplier = 1;
+  velocity_cmd_p_term = 0.0;
 
-  // action_output[0] = 0;
-  // action_output[1] = 0;
-  // action_output[2] = 0;
-  // action_output[3] = 0;
+  action_output[0] = 0;
+  action_output[1] = 0;
+  action_output[2] = 0;
+  action_output[3] = 0;
 
-  // target_height = 0.0;
-  // target_height_figure_eight = 0.0;
+  target_height = 0.0;
+  target_height_figure_eight = 0.0;
 
-  // // mode = NORMAL;
-  // mode = POSITION;
-  // // mode = FIGURE_EIGHT;
-  // trigger_mode = RL_TOOLS_PACKET;
-  // // trigger_mode = HOVER_PACKET;
-  // use_orig_controller = 0;
-  // waypoint_navigation_dynamic_current_waypoint = 0;
-  // // waypoint_navigation_dynamic_threshold = 0;
+  // mode = NORMAL;
+  mode = POSITION;
+  // mode = FIGURE_EIGHT;
+  trigger_mode = RL_TOOLS_PACKET;
+  // trigger_mode = HOVER_PACKET;
+  use_orig_controller = 0;
+  waypoint_navigation_dynamic_current_waypoint = 0;
+  // waypoint_navigation_dynamic_threshold = 0;
 
-  // figure_eight_interval = 5.5;
-  // figure_eight_scale = 1;
-  // figure_eight_progress = 0;
-  // figure_eight_warmup_time = 2;
-  // healthy_status_count_intermediate = 0;
-  // non_healthy_status_count_intermediate = 0;
-  // healthy_status_count_native = 0;
-  // non_healthy_status_count_native = 0;
+  figure_eight_interval = 5.5;
+  figure_eight_scale = 1;
+  figure_eight_progress = 0;
+  figure_eight_warmup_time = 2;
+  healthy_status_count_intermediate = 0;
+  non_healthy_status_count_intermediate = 0;
+  healthy_status_count_native = 0;
+  non_healthy_status_count_native = 0;
 
-  // controllerPidInit();
-  // controllerMellingerFirmwareInit();
-  // controllerINDIInit();
-  // controllerBrescianiniInit();
-  // rl_tools_inference_applications_l2f_init();
+  controllerPidInit();
+  controllerMellingerFirmwareInit();
+  controllerINDIInit();
+  controllerBrescianiniInit();
+  rl_tools_inference_applications_l2f_init();
 
   // DEBUG_PRINT("Checkpoint: %s\n", rl_tools_inference_applications_l2f_checkpoint_name());
 }
