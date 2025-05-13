@@ -596,7 +596,7 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
       }
       RLtoolsInferenceApplicationsL2FAction action;
       RLtoolsInferenceExecutorStatus rlt_status;
-      // rlt_status = rl_tools_inference_applications_l2f_control(before * 1000, &observation, &action);
+      rlt_status = rl_tools_inference_applications_l2f_control(before * 1000, &observation, &action);
       if(!rlt_status.OK){
         if(rlt_status.source == RL_TOOLS_INFERENCE_EXECUTOR_STATUS_SOURCE_CONTROL){
           if(rlt_status.step_type == RL_TOOLS_INFERENCE_EXECUTOR_STATUS_STEP_TYPE_INTERMEDIATE){
