@@ -308,13 +308,12 @@ bool controllerOutOfTreeTest(void){
   if(test_absdiff < 0){
     test_absdiff = -test_absdiff;
   }
-  // printing here in 2025.2 is deadly for some reason (deferred to the first control invocation)
-  if(test_absdiff > 0.2){
-    return false;
-  }
   DEBUG_PRINT("RLtools controller test, abs diff: %f\n", test_absdiff);
   for(int i = 0; i < RL_TOOLS_INTERFACE_APPLICATIONS_L2F_ACTION_DIM; i++){
     DEBUG_PRINT("RLtools controller: Test action %d: %f\n", i, test_output.action[i]);
+  }
+  if(test_absdiff > 0.2){
+    return false;
   }
   return controllerPidTest() && controllerMellingerFirmwareTest() && controllerINDITest() && controllerBrescianiniTest();
 }
