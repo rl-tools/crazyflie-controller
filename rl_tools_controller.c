@@ -303,7 +303,7 @@ void controllerOutOfTreeInit(void){
 }
 
 bool controllerOutOfTreeTest(void){
-  return true; //controllerPidTest() && controllerMellingerFirmwareTest() && controllerINDITest() && controllerBrescianiniTest();
+  return controllerPidTest() && controllerMellingerFirmwareTest() && controllerINDITest() && controllerBrescianiniTest();
 }
 
 static void batteryCompensation(const motors_thrust_uncapped_t* motorThrustUncapped, motors_thrust_uncapped_t* motorThrustBatCompUncapped)
