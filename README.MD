@@ -26,6 +26,8 @@ make cf2_defconfig
 make
 
 
+### "Too many packets lost" Issue
+To prevent the "Too many packets lost" issue after startup please use the cfclient UI to flash `2023.02` first. This will flash an older firmware for the radio module which has a longer boot delay for better stability. When flashing the modified firmware with cfloader, the radio firmware is not overwritten (you can confirm this in the cfclient console). For the Crazyflie Brushless use `2024.10.2` (not perfect, but more stable than `2025.02`)
 ### flash
 ```
 cfloader flash build/cf2.bin stm32-fw -w radio://0/80/2M

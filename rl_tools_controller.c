@@ -638,24 +638,24 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
         #ifdef NEW_RL_TOOLS_CONTROLLER
         if(non_healthy_status_count_intermediate > 0){
           rl_tools_inference_executor_status_message(non_healthy_status_intermediate, status_message, STATUS_MESSAGE_SIZE);
-          // DEBUG_PRINT("%d / %d healty intermediate statii, latest: %s\n", healthy_status_count_intermediate, (healthy_status_count_intermediate + non_healthy_status_count_intermediate), status_message);
+          DEBUG_PRINT("%d / %d healthy intermediate statii, latest: %s\n", healthy_status_count_intermediate, (healthy_status_count_intermediate + non_healthy_status_count_intermediate), status_message);
         }
         else{
-          // DEBUG_PRINT("%d healty intermediate statii\n", healthy_status_count_intermediate);
+          DEBUG_PRINT("%d healthy intermediate statii\n", healthy_status_count_intermediate);
         }
         non_healthy_status_count_intermediate = 0;
         healthy_status_count_intermediate = 0;
         if(non_healthy_status_count_native > 0){
           rl_tools_inference_executor_status_message(non_healthy_status_native, status_message, STATUS_MESSAGE_SIZE);
-          // DEBUG_PRINT("%d / %d healty native statii, latest: %s\n", healthy_status_count_native, (healthy_status_count_native + non_healthy_status_count_native), status_message);
+          DEBUG_PRINT("%d / %d healthy native statii, latest: %s\n", healthy_status_count_native, (healthy_status_count_native + non_healthy_status_count_native), status_message);
         }
         else{
-          // DEBUG_PRINT("%d healty native statii\n", healthy_status_count_native);
+          DEBUG_PRINT("%d healthy native statii\n", healthy_status_count_native);
         }
         non_healthy_status_count_native = 0;
         healthy_status_count_native = 0;
         rl_tools_inference_executor_status_message(rlt_status, status_message, STATUS_MESSAGE_SIZE);
-        // DEBUG_PRINT("RLtools controller status %s\n", status_message);
+        DEBUG_PRINT("RLtools controller status %s\n", status_message);
         #endif
         if(controller_tick > 1000){
           #ifdef RL_TOOLS_ENABLE_DEBUGGING_POOL
