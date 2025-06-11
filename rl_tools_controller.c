@@ -93,8 +93,8 @@ static RLtoolsInferenceExecutorStatus non_healthy_status_intermediate, non_healt
 uint32_t healthy_status_count_intermediate, non_healthy_status_count_intermediate, healthy_status_count_native, non_healthy_status_count_native;
 
 enum Mode{
-  NORMAL = 0,
-  POSITION = 1,
+  NORMAL = 0, // take setpoints from the standard cf firmware pipeline
+  POSITION = 1, // hardcoded position (e.g. z offset)
   WAYPOINT_NAVIGATION = 2,
   WAYPOINT_NAVIGATION_DYNAMIC = 3,
   FIGURE_EIGHT = 4
@@ -105,6 +105,7 @@ enum TriggerMode{
 };
 static uint8_t mode;
 static uint8_t trigger_mode;
+static uint8_t learned_controller_packet_gates_motors;
 static float trajectory[WAYPOINT_NAVIGATION_NUMBER_OF_POINTS][3] = {
   {0.0, 0.0, 0.0},
   {1.0, 0.0, 0.0},
@@ -280,6 +281,7 @@ void controllerOutOfTreeInit(void){
   // mode = FIGURE_EIGHT;
   trigger_mode = RL_TOOLS_PACKET;
   // trigger_mode = HOVER_PACKET;
+  learned_controller_packet_gates_motors = true;
   use_orig_controller = 0;
   waypoint_navigation_dynamic_current_waypoint = 0;
   // waypoint_navigation_dynamic_threshold = 0;
@@ -575,120 +577,120 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
   prev_set_motors = set_motors;
   prev_pre_set_motors = pre_set_motors;
 
-    update_state(sensors, state);
-    {
-      int64_t before = usecTimestamp();
-      uint32_t start_cycle = DWT->CYCCNT;
+  update_state(sensors, state);
+  {
+    int64_t before = usecTimestamp();
+    uint32_t start_cycle = DWT->CYCCNT;
 #ifdef NEW_RL_TOOLS_CONTROLLER
-      RLtoolsInferenceApplicationsL2FObservation observation;
-      for(uint8_t i=0; i<4; i++){
-        if(i < 3){
-          observation.position[i] = state_input[i];
-          observation.orientation[i] = state_input[3+i];
-          observation.linear_velocity[i] = state_input[3+4+i];
-          observation.angular_velocity[i] = state_input[3+4+3+i];
-          observation.previous_action[i] = action_output[i];
-        }
-        else{
-          observation.orientation[i] = state_input[3+i];
-          observation.previous_action[i] = action_output[i];
-        }
-      }
-      RLtoolsInferenceApplicationsL2FAction action;
-      RLtoolsInferenceExecutorStatus rlt_status;
-      rlt_status = rl_tools_inference_applications_l2f_control(before * 1000, &observation, &action);
-      if(!rlt_status.OK){
-        if(rlt_status.source == RL_TOOLS_INFERENCE_EXECUTOR_STATUS_SOURCE_CONTROL){
-          if(rlt_status.step_type == RL_TOOLS_INFERENCE_EXECUTOR_STATUS_STEP_TYPE_INTERMEDIATE){
-            non_healthy_status_intermediate = rlt_status;
-            non_healthy_status_count_intermediate++;
-          }
-          else{
-            non_healthy_status_native = rlt_status;
-            non_healthy_status_count_native++;
-          }
-        }
+    RLtoolsInferenceApplicationsL2FObservation observation;
+    for(uint8_t i=0; i<4; i++){
+      if(i < 3){
+        observation.position[i] = state_input[i];
+        observation.orientation[i] = state_input[3+i];
+        observation.linear_velocity[i] = state_input[3+4+i];
+        observation.angular_velocity[i] = state_input[3+4+3+i];
+        observation.previous_action[i] = action_output[i];
       }
       else{
-        if(rlt_status.source == RL_TOOLS_INFERENCE_EXECUTOR_STATUS_SOURCE_CONTROL){
-          if(rlt_status.step_type == RL_TOOLS_INFERENCE_EXECUTOR_STATUS_STEP_TYPE_INTERMEDIATE){
-            healthy_status_count_intermediate++;
-          }
-          else{
-            healthy_status_count_native++;
-          }
-        }
+        observation.orientation[i] = state_input[3+i];
+        observation.previous_action[i] = action_output[i];
       }
-      for(uint8_t i=0; i<4; i++){
-        action_output[i] = action.action[i];
-      }
+    }
+    RLtoolsInferenceApplicationsL2FAction action;
+    RLtoolsInferenceExecutorStatus rlt_status;
+    rlt_status = rl_tools_inference_applications_l2f_control(before * 1000, &observation, &action);
+    if(!rlt_status.OK){
       if(rlt_status.source == RL_TOOLS_INFERENCE_EXECUTOR_STATUS_SOURCE_CONTROL){
-        rlt_policy_tick++;
-      }
-#else
-      rl_tools_control(state_input, action_output);
-#endif
-      uint32_t end_cycle = DWT->CYCCNT;
-      uint32_t cycles = end_cycle - start_cycle;
-      int64_t after = usecTimestamp();
-      if ((rlt_status.source == RL_TOOLS_INFERENCE_EXECUTOR_STATUS_SOURCE_CONTROL) && rlt_policy_tick % 500 == 0){
-        // DEBUG_PRINT("rl_tools_control took %lu cycles (%lldus)\n", cycles, after - before);
-      }
-      if((tick % (CONTROL_INTERVAL_MS * 1000) == 0)){
-        #ifdef NEW_RL_TOOLS_CONTROLLER
-        if(non_healthy_status_count_intermediate > 0){
-          rl_tools_inference_executor_status_message(non_healthy_status_intermediate, status_message, STATUS_MESSAGE_SIZE);
-          DEBUG_PRINT("%d / %d healthy intermediate statii, latest: %s\n", healthy_status_count_intermediate, (healthy_status_count_intermediate + non_healthy_status_count_intermediate), status_message);
+        if(rlt_status.step_type == RL_TOOLS_INFERENCE_EXECUTOR_STATUS_STEP_TYPE_INTERMEDIATE){
+          non_healthy_status_intermediate = rlt_status;
+          non_healthy_status_count_intermediate++;
         }
         else{
-          // DEBUG_PRINT("%d healthy intermediate statii\n", healthy_status_count_intermediate);
-        }
-        non_healthy_status_count_intermediate = 0;
-        healthy_status_count_intermediate = 0;
-        if(non_healthy_status_count_native > 0){
-          rl_tools_inference_executor_status_message(non_healthy_status_native, status_message, STATUS_MESSAGE_SIZE);
-          DEBUG_PRINT("%d / %d healthy native statii, latest: %s\n", healthy_status_count_native, (healthy_status_count_native + non_healthy_status_count_native), status_message);
-        }
-        else{
-          // DEBUG_PRINT("%d healthy native statii\n", healthy_status_count_native);
-        }
-        non_healthy_status_count_native = 0;
-        healthy_status_count_native = 0;
-        rl_tools_inference_executor_status_message(rlt_status, status_message, STATUS_MESSAGE_SIZE);
-        // DEBUG_PRINT("RLtools controller status %s\n", status_message);
-        #endif
-        if(controller_tick > 1000){
-          #ifdef RL_TOOLS_ENABLE_DEBUGGING_POOL
-          debugging_pool_print();
-          #endif
+          non_healthy_status_native = rlt_status;
+          non_healthy_status_count_native++;
         }
       }
-      if(use_orig_controller != 0){
-        action_output[0] = -0.8;
-        action_output[1] = -0.8;
-        action_output[2] = -0.8;
-        action_output[3] = -0.8;
+    }
+    else{
+      if(rlt_status.source == RL_TOOLS_INFERENCE_EXECUTOR_STATUS_SOURCE_CONTROL){
+        if(rlt_status.step_type == RL_TOOLS_INFERENCE_EXECUTOR_STATUS_STEP_TYPE_INTERMEDIATE){
+          healthy_status_count_intermediate++;
+        }
+        else{
+          healthy_status_count_native++;
+        }
       }
     }
     for(uint8_t i=0; i<4; i++){
-      if (tick % (CONTROL_INTERVAL_MS * 1000) == 0){
-        // DEBUG_PRINT("action_output[%d]: %f\n", i, action_output[i]);
+      action_output[i] = action.action[i];
+    }
+    if(rlt_status.source == RL_TOOLS_INFERENCE_EXECUTOR_STATUS_SOURCE_CONTROL){
+      rlt_policy_tick++;
+    }
+#else
+    rl_tools_control(state_input, action_output);
+#endif
+    uint32_t end_cycle = DWT->CYCCNT;
+    uint32_t cycles = end_cycle - start_cycle;
+    int64_t after = usecTimestamp();
+    if ((rlt_status.source == RL_TOOLS_INFERENCE_EXECUTOR_STATUS_SOURCE_CONTROL) && rlt_policy_tick % 500 == 0){
+      // DEBUG_PRINT("rl_tools_control took %lu cycles (%lldus)\n", cycles, after - before);
+    }
+    if((tick % (CONTROL_INTERVAL_MS * 1000) == 0)){
+      #ifdef NEW_RL_TOOLS_CONTROLLER
+      if(non_healthy_status_count_intermediate > 0){
+        rl_tools_inference_executor_status_message(non_healthy_status_intermediate, status_message, STATUS_MESSAGE_SIZE);
+        DEBUG_PRINT("%d / %d healthy intermediate statii, latest: %s\n", healthy_status_count_intermediate, (healthy_status_count_intermediate + non_healthy_status_count_intermediate), status_message);
       }
-      float a_pp = (action_output[i] + 1)/2;
-      float des_rpm = (MAX_RPM - MIN_RPM) * a_pp + MIN_RPM;
-      float des_percentage = des_rpm / MAX_RPM;
-      motor_cmd_float[i] = des_percentage;
-      motor_cmd[i] = des_percentage * UINT16_MAX;
-      if(set_motors && use_orig_controller == 0){
-        motorsSetRatio(motors[i], clip((float)motor_cmd[i] / motor_cmd_divider, 0, UINT16_MAX));
+      else{
+        // DEBUG_PRINT("%d healthy intermediate statii\n", healthy_status_count_intermediate);
+      }
+      non_healthy_status_count_intermediate = 0;
+      healthy_status_count_intermediate = 0;
+      if(non_healthy_status_count_native > 0){
+        rl_tools_inference_executor_status_message(non_healthy_status_native, status_message, STATUS_MESSAGE_SIZE);
+        DEBUG_PRINT("%d / %d healthy native statii, latest: %s\n", healthy_status_count_native, (healthy_status_count_native + non_healthy_status_count_native), status_message);
+      }
+      else{
+        // DEBUG_PRINT("%d healthy native statii\n", healthy_status_count_native);
+      }
+      non_healthy_status_count_native = 0;
+      healthy_status_count_native = 0;
+      rl_tools_inference_executor_status_message(rlt_status, status_message, STATUS_MESSAGE_SIZE);
+      // DEBUG_PRINT("RLtools controller status %s\n", status_message);
+      #endif
+      if(controller_tick > 1000){
+        #ifdef RL_TOOLS_ENABLE_DEBUGGING_POOL
+        debugging_pool_print();
+        #endif
       }
     }
-    int64_t spare_time = CONTROL_INTERVAL_US - (now - timestamp_last_reset) ;
-    if(spare_time < 0 && (now - timestamp_last_behind_schedule_message > BEHIND_SCHEDULE_MESSAGE_MIN_INTERVAL)){
-      // DEBUG_PRINT("Learned Controller is behind schedule: %lldus/%dus\n", (int64_t)(now-timestamp_last_reset), CONTROL_INTERVAL_US);
-      timestamp_last_behind_schedule_message = now;
+    if(use_orig_controller != 0){
+      action_output[0] = -0.8;
+      action_output[1] = -0.8;
+      action_output[2] = -0.8;
+      action_output[3] = -0.8;
     }
-    timestamp_last_reset = usecTimestamp();
+  }
+  for(uint8_t i=0; i<4; i++){
+    if (tick % (CONTROL_INTERVAL_MS * 1000) == 0){
+      // DEBUG_PRINT("action_output[%d]: %f\n", i, action_output[i]);
+    }
+    float a_pp = (action_output[i] + 1)/2;
+    float des_rpm = (MAX_RPM - MIN_RPM) * a_pp + MIN_RPM;
+    float des_percentage = des_rpm / MAX_RPM;
+    motor_cmd_float[i] = des_percentage;
+    motor_cmd[i] = des_percentage * UINT16_MAX;
+    if(set_motors && use_orig_controller == 0){
+      motorsSetRatio(motors[i], clip((float)motor_cmd[i] / motor_cmd_divider, 0, UINT16_MAX));
+    }
+  }
+  int64_t spare_time = CONTROL_INTERVAL_US - (now - timestamp_last_reset) ;
+  if(spare_time < 0 && (now - timestamp_last_behind_schedule_message > BEHIND_SCHEDULE_MESSAGE_MIN_INTERVAL)){
+    // DEBUG_PRINT("Learned Controller is behind schedule: %lldus/%dus\n", (int64_t)(now-timestamp_last_reset), CONTROL_INTERVAL_US);
+    timestamp_last_behind_schedule_message = now;
+  }
+  timestamp_last_reset = usecTimestamp();
   if(!set_motors){
     if(pre_set_motors){
       for(uint8_t i=0; i<4; i++){
@@ -696,15 +698,24 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
       }
     }
     else{
-      controllerPid(control, setpoint, sensors, state, tick);
-      powerDistribution(control, &motorThrustUncapped);
-      batteryCompensation(&motorThrustUncapped, &motorThrustBatCompUncapped);
-      powerDistributionCap(&motorThrustBatCompUncapped, &motorPwm);
-      setMotorRatios(&motorPwm);
-      motor_cmd_float[0] = motorPwm.motors.m1/(float)UINT16_MAX;
-      motor_cmd_float[1] = motorPwm.motors.m2/(float)UINT16_MAX;
-      motor_cmd_float[2] = motorPwm.motors.m3/(float)UINT16_MAX;
-      motor_cmd_float[3] = motorPwm.motors.m4/(float)UINT16_MAX;
+      if(learned_controller_packet_gates_motors){
+        // if the learned controller packet gates the motors, they are shut off. Otherwise we execute the normal controller stack (e.g. to handover in mid-air)
+        motorsSetRatio(motors[0], 0);
+        motorsSetRatio(motors[1], 0);
+        motorsSetRatio(motors[2], 0);
+        motorsSetRatio(motors[3], 0);
+      }
+      else{
+        controllerPid(control, setpoint, sensors, state, tick);
+        powerDistribution(control, &motorThrustUncapped);
+        batteryCompensation(&motorThrustUncapped, &motorThrustBatCompUncapped);
+        powerDistributionCap(&motorThrustBatCompUncapped, &motorPwm);
+        setMotorRatios(&motorPwm);
+        motor_cmd_float[0] = motorPwm.motors.m1/(float)UINT16_MAX;
+        motor_cmd_float[1] = motorPwm.motors.m2/(float)UINT16_MAX;
+        motor_cmd_float[2] = motorPwm.motors.m3/(float)UINT16_MAX;
+        motor_cmd_float[3] = motorPwm.motors.m4/(float)UINT16_MAX;
+      }
     }
   }
   else{
@@ -779,6 +790,7 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
 
 PARAM_GROUP_START(rlt)
 PARAM_ADD(PARAM_UINT8, trigger, &trigger_mode)
+PARAM_ADD(PARAM_UINT8, gate, &learned_controller_packet_gates_motors)
 PARAM_ADD(PARAM_UINT8, motor_warmup, &use_pre_set_warmup)
 PARAM_ADD(PARAM_FLOAT, motor_div, &motor_cmd_divider)
 PARAM_ADD(PARAM_FLOAT, motor_div_wu, &motor_cmd_divider_warmup)
