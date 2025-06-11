@@ -45,3 +45,16 @@ DYLD_LIBRARY_PATH="/opt/homebrew/lib:$DYLD_LIBRARY_PATH" cfclient
 # MOCAP
 
 Please configure the `locSrv.ExtQuatStdDev` such that the yaw estimate is stable
+
+
+# Facing Connection Issues?
+Flash the modified NRF firmware (re-adding a boot delay that was lost somewhere between `2023.02` and `2025.02`):
+
+```
+sudo apt-get install gcc-arm-none-eabi gdb-arm-none-eabi binutils-arm-none-eabi
+cd external/nrf-firmware
+./tools/fetch-dependencies.sh
+make PLATFORM=cf21bl
+make PLATFORM=cf21bl cload
+```
+While `cload` is running, restart the Crazyflie in bootloader mode by keeping the button pressed for a few seconds until the LEDs start blinking
