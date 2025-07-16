@@ -704,6 +704,7 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
         motorsSetRatio(motors[1], 0);
         motorsSetRatio(motors[2], 0);
         motorsSetRatio(motors[3], 0);
+        motorsStop();
       }
       else{
         controllerPid(control, setpoint, sensors, state, tick);

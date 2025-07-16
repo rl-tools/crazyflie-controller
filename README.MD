@@ -25,8 +25,21 @@ cd ../../
 make
 ``` -->
 
+### CF2
+```
 make cf2_defconfig
 make
+cfloader flash build/cf2.bin stm32-fw -w radio://0/80/2M/E7E7E7E7E7
+```
+
+### CF2 Brushless
+
+```
+git clean -dfx
+make cf21bl_defconfig
+make
+cfloader flash build/cf21bl.bin stm32-fw -w radio://0/80/2M/E7E7E7E7E9
+```
 
 
 ### "Too many packets lost" Issue
