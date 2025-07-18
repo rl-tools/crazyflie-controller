@@ -240,7 +240,7 @@ void controllerOutOfTreeInit(void){
   timestamp_last_reset = usecTimestamp();
   prev_set_motors = false;
   prev_pre_set_motors = false;
-  use_pre_set_warmup = 0;
+  use_pre_set_warmup = 1;
   timestamp_last_control_packet_received = 0;
   timestamp_last_control_packet_received_hover = 0;
   timestamp_last_behind_schedule_message = 0;
@@ -476,7 +476,7 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
       switch(setpoint->mode.x){
         case modeAbs:
         target_pos[0] = setpoint->position.x;
-        target_vel[0] = 0;
+        target_vel[0] = setpoint->velocity.x;
         break;
         case modeVelocity:
         target_pos[0] = state->position.x - setpoint->velocity.x * velocity_cmd_p_term;
@@ -490,7 +490,7 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
       switch(setpoint->mode.y){
         case modeAbs:
         target_pos[1] = setpoint->position.y;
-        target_vel[1] = 0;
+        target_vel[1] = setpoint->velocity.y;
         break;
         case modeVelocity:
         target_pos[1] = state->position.y - setpoint->velocity.y * velocity_cmd_p_term;
@@ -504,7 +504,7 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
       switch(setpoint->mode.z){
         case modeAbs:
         target_pos[2] = setpoint->position.z;
-        target_vel[2] = 0;
+        target_vel[2] = setpoint->velocity.z;
         break;
         case modeVelocity:
         target_pos[2] = state->position.z - setpoint->velocity.z * velocity_cmd_p_term;
