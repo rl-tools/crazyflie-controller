@@ -227,7 +227,7 @@ void controllerOutOfTreeInit(void){
   controller_tick = 0;
   rlt_policy_tick = 0;
   motor_cmd_divider = 1.0;
-  motor_cmd_divider_warmup = 7.0;
+  motor_cmd_divider_warmup = 4.0;
 
   motor_cmd[0] = 0;
   motor_cmd[1] = 0;
