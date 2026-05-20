@@ -19,6 +19,7 @@
 #else
 #include "rl_tools_adapter.h"
 #endif
+#include "visual_yaw_uart.h"
 #include "stabilizer_types.h"
 #include "pm.h"
 #include "task.h"
@@ -147,6 +148,14 @@ static setpoint_t last_setpoint;
 static uint8_t hand_test = 0; // 0 = off; 1 = setpoint; 2 = angular velocity rejection; 3 = angular velocity rejection + orientation rejection;
 static uint8_t use_orig_controller = 0;
 
+static uint8_t visual_yaw_enable = 1;
+static uint32_t visual_yaw_timeout_ms = 50;
+static float visual_yaw_rad = 0.0f;
+static uint32_t visual_yaw_age_ms = 0;
+static uint8_t visual_yaw_target_seq = 0;
+static uint8_t visual_yaw_flags = 0;
+static uint8_t visual_yaw_valid = 0;
+static uint8_t visual_yaw_fresh = 0;
 
 static inline float clip(float v, float low, float high){
   if(v < low){
@@ -162,6 +171,84 @@ static inline float clip(float v, float low, float high){
   }
 }
 
+static inline float clamp_unit(float v){
+  return clip(v, -1.0f, 1.0f);
+}
+
+static inline void quat_to_roll_pitch(float qw, float qx, float qy, float qz, float *roll, float *pitch){
+  float sinr_cosp = 2.0f * (qw * qx + qy * qz);
+  float cosr_cosp = 1.0f - 2.0f * (qx * qx + qy * qy);
+  *roll = atan2f(sinr_cosp, cosr_cosp);
+
+  float sinp = 2.0f * (qw * qy - qz * qx);
+  *pitch = asinf(clamp_unit(sinp));
+}
+
+static inline void quat_from_roll_pitch_yaw(float roll, float pitch, float yaw,
+                                            float *qw, float *qx, float *qy, float *qz){
+  float cr = cosf(roll * 0.5f);
+  float sr = sinf(roll * 0.5f);
+  float cp = cosf(pitch * 0.5f);
+  float sp = sinf(pitch * 0.5f);
+  float cy = cosf(yaw * 0.5f);
+  float sy = sinf(yaw * 0.5f);
+
+  *qw = cr * cp * cy + sr * sp * sy;
+  *qx = sr * cp * cy - cr * sp * sy;
+  *qy = cr * sp * cy + sr * cp * sy;
+  *qz = cr * cp * sy - sr * sp * cy;
+
+  float norm = sqrtf((*qw) * (*qw) + (*qx) * (*qx) + (*qy) * (*qy) + (*qz) * (*qz));
+  if(norm > 1.0e-6f){
+    *qw /= norm;
+    *qx /= norm;
+    *qy /= norm;
+    *qz /= norm;
+  }
+  else{
+    *qw = 1.0f;
+    *qx = 0.0f;
+    *qy = 0.0f;
+    *qz = 0.0f;
+  }
+}
+
+static inline bool visual_yaw_update(float *yaw_rad){
+  uint8_t target_seq = 0;
+  uint8_t flags = 0;
+  uint32_t age_ms = 0;
+  float yaw = 0.0f;
+  bool has_frame = visualYawGetLatest(&yaw, &target_seq, &flags, &age_ms);
+
+  visual_yaw_rad = yaw;
+  visual_yaw_target_seq = target_seq;
+  visual_yaw_flags = flags;
+  visual_yaw_age_ms = age_ms;
+  visual_yaw_valid = (has_frame &&
+                      ((flags & (VISUAL_YAW_FLAG_TARGET_VALID | VISUAL_YAW_FLAG_PREDICTION_VALID)) ==
+                       (VISUAL_YAW_FLAG_TARGET_VALID | VISUAL_YAW_FLAG_PREDICTION_VALID))) ? 1 : 0;
+  visual_yaw_fresh = (visual_yaw_valid && age_ms <= visual_yaw_timeout_ms) ? 1 : 0;
+  if(yaw_rad != NULL){
+    *yaw_rad = yaw;
+  }
+  return visual_yaw_enable != 0 && visual_yaw_fresh != 0;
+}
+
+static inline bool visual_yaw_quaternion(const state_t* state, float *qw, float *qx, float *qy, float *qz){
+  float yaw = 0.0f;
+  if(!visual_yaw_update(&yaw)){
+    return false;
+  }
+
+  float roll = 0.0f;
+  float pitch = 0.0f;
+  quat_to_roll_pitch(state->attitudeQuaternion.w, state->attitudeQuaternion.x,
+                     state->attitudeQuaternion.y, state->attitudeQuaternion.z,
+                     &roll, &pitch);
+  quat_from_roll_pitch_yaw(roll, pitch, yaw, qw, qx, qy, qz);
+  return true;
+}
+
 static inline void update_state(const sensorData_t* sensors, const state_t* state){
   if(hand_test == 0){
     float POS_DISTANCE_LIMIT = mode == FIGURE_EIGHT ? pos_distance_limit_figure_eight : pos_distance_limit_position;
@@ -175,12 +262,18 @@ static inline void update_state(const sensorData_t* sensors, const state_t* stat
     state_input[ 2] = 0;
   }
   if(hand_test == 0 || hand_test == 3){
-    state_input[ 3] = state->attitudeQuaternion.w;
-    state_input[ 4] = state->attitudeQuaternion.x;
-    state_input[ 5] = state->attitudeQuaternion.y;
-    state_input[ 6] = state->attitudeQuaternion.z;
+    float qw = state->attitudeQuaternion.w;
+    float qx = state->attitudeQuaternion.x;
+    float qy = state->attitudeQuaternion.y;
+    float qz = state->attitudeQuaternion.z;
+    visual_yaw_quaternion(state, &qw, &qx, &qy, &qz);
+    state_input[ 3] = qw;
+    state_input[ 4] = qx;
+    state_input[ 5] = qy;
+    state_input[ 6] = qz;
   }
   else{
+    visual_yaw_update(NULL);
     state_input[ 3] = 1;
     state_input[ 4] = 0;
     state_input[ 5] = 0;
@@ -255,6 +348,14 @@ void controllerOutOfTreeInit(void){
   relative_pos[1] = 0;
   relative_pos[2] = 0;
   log_set_motors = 0;
+  visual_yaw_enable = 1;
+  visual_yaw_timeout_ms = 50;
+  visual_yaw_rad = 0.0f;
+  visual_yaw_age_ms = 0;
+  visual_yaw_target_seq = 0;
+  visual_yaw_flags = 0;
+  visual_yaw_valid = 0;
+  visual_yaw_fresh = 0;
   
   waypoint_navigation_target_vel = 0.0;
 
@@ -300,6 +401,7 @@ void controllerOutOfTreeInit(void){
   controllerMellingerFirmwareInit();
   controllerINDIInit();
   controllerBrescianiniInit();
+  visualYawUartInit();
   rl_tools_inference_applications_l2f_init();
 
   DEBUG_PRINT("Checkpoint: %s\n", rl_tools_inference_applications_l2f_checkpoint_name());
@@ -436,6 +538,7 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
     controllerMellingerFirmwareInit();
     controllerINDIInit();
     // controllerMellingerFirmwareEnableIntegrators(MELLINGER_ENABLE_INTEGRATORS == 1);
+    visualYawRequestTargetCapture(VISUAL_YAW_TARGET_REASON_CONTROLLER_ACTIVATED);
     rl_tools_inference_applications_l2f_reset();
     DEBUG_PRINT("Controller activated\n");
     switch(mode){
@@ -806,6 +909,8 @@ PARAM_ADD(PARAM_UINT8, orig, &use_orig_controller)
 PARAM_ADD(PARAM_UINT8, mei, &mellinger_enable_integrators)
 PARAM_ADD(PARAM_FLOAT, vcmdm, &velocity_cmd_multiplier)
 PARAM_ADD(PARAM_FLOAT, vcmdp, &velocity_cmd_p_term)
+PARAM_ADD(PARAM_UINT8, vyaw, &visual_yaw_enable)
+PARAM_ADD(PARAM_UINT32, vyawTmo, &visual_yaw_timeout_ms)
 PARAM_GROUP_STOP(rlt)
 
 
@@ -835,3 +940,12 @@ LOG_ADD(LOG_FLOAT, y, &pos_error[1])
 LOG_ADD(LOG_FLOAT, z, &pos_error[2])
 LOG_GROUP_STOP(rltre)
 
+LOG_GROUP_START(rltvy)
+LOG_ADD(LOG_UINT8, en, &visual_yaw_enable)
+LOG_ADD(LOG_UINT8, valid, &visual_yaw_valid)
+LOG_ADD(LOG_UINT8, fresh, &visual_yaw_fresh)
+LOG_ADD(LOG_UINT8, flags, &visual_yaw_flags)
+LOG_ADD(LOG_UINT8, target, &visual_yaw_target_seq)
+LOG_ADD(LOG_UINT32, age, &visual_yaw_age_ms)
+LOG_ADD(LOG_FLOAT, yaw, &visual_yaw_rad)
+LOG_GROUP_STOP(rltvy)
