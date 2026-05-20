@@ -606,6 +606,7 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
     controllerINDIInit();
     // controllerMellingerFirmwareEnableIntegrators(MELLINGER_ENABLE_INTEGRATORS == 1);
     capture_visual_yaw_reference(state);
+    visualYawStartRecording(VISUAL_YAW_TARGET_REASON_CONTROLLER_ACTIVATED);
     visualYawRequestTargetCapture(VISUAL_YAW_TARGET_REASON_CONTROLLER_ACTIVATED);
     rl_tools_inference_applications_l2f_reset();
     DEBUG_PRINT("Controller activated\n");
@@ -633,6 +634,7 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
   if(prev_set_motors && !set_motors){
     DEBUG_PRINT("Controller deactivated\n");
     visual_yaw_reference_valid = 0;
+    visualYawStopAndSaveRecording(VISUAL_YAW_TARGET_REASON_CONTROLLER_DEACTIVATED);
     for(uint8_t i=0; i<4; i++){
       motorsSetRatio(motors[i], 0);
     }

@@ -39,6 +39,9 @@
 #define TARGET_CAPTURE_CRC_PAYLOAD_BYTES 5
 
 #define TARGET_CAPTURE_COMMAND_CURRENT 0x01
+#define TARGET_CAPTURE_COMMAND_RECORD_START 0x02
+#define TARGET_CAPTURE_COMMAND_RECORD_STOP_SAVE 0x03
+#define TARGET_CAPTURE_COMMAND_RECORD_ABORT 0x04
 #define TARGET_CAPTURE_FLAG_REQUIRE_ACK 0x01
 #define VISUAL_YAW_KNOWN_FLAGS (VISUAL_YAW_FLAG_TARGET_VALID | \
                                 VISUAL_YAW_FLAG_PREDICTION_VALID | \
@@ -66,6 +69,7 @@ static uint8_t frameFresh = 0;
 
 static uint8_t targetCommandSeq = 0;
 static uint8_t captureParam = 0;
+static uint8_t recordParam = 0;
 
 static uint32_t framesOk = 0;
 static uint32_t framesBadCrc = 0;
@@ -306,7 +310,7 @@ bool visualYawIsFresh(uint32_t timeoutMs)
           (VISUAL_YAW_FLAG_TARGET_VALID | VISUAL_YAW_FLAG_PREDICTION_VALID));
 }
 
-void visualYawRequestTargetCapture(uint8_t reason)
+static void visualYawSendCommand(uint8_t command, uint8_t reason, uint8_t flags)
 {
   uint8_t raw[TARGET_CAPTURE_RAW_BYTES];
   uint8_t crcPayload[TARGET_CAPTURE_CRC_PAYLOAD_BYTES];
@@ -314,9 +318,9 @@ void visualYawRequestTargetCapture(uint8_t reason)
   uint8_t start = FRAME_START_MASK | FRAME_TYPE_TARGET_CAPTURE;
 
   raw[0] = targetCommandSeq++;
-  raw[1] = TARGET_CAPTURE_COMMAND_CURRENT;
+  raw[1] = command;
   raw[2] = reason;
-  raw[3] = TARGET_CAPTURE_FLAG_REQUIRE_ACK;
+  raw[3] = flags;
 
   crcPayload[0] = start;
   for (int i = 0; i < 4; i++) {
@@ -334,6 +338,26 @@ void visualYawRequestTargetCapture(uint8_t reason)
   }
 }
 
+void visualYawRequestTargetCapture(uint8_t reason)
+{
+  visualYawSendCommand(TARGET_CAPTURE_COMMAND_CURRENT, reason, TARGET_CAPTURE_FLAG_REQUIRE_ACK);
+}
+
+void visualYawStartRecording(uint8_t reason)
+{
+  visualYawSendCommand(TARGET_CAPTURE_COMMAND_RECORD_START, reason, 0);
+}
+
+void visualYawStopAndSaveRecording(uint8_t reason)
+{
+  visualYawSendCommand(TARGET_CAPTURE_COMMAND_RECORD_STOP_SAVE, reason, 0);
+}
+
+void visualYawAbortRecording(uint8_t reason)
+{
+  visualYawSendCommand(TARGET_CAPTURE_COMMAND_RECORD_ABORT, reason, 0);
+}
+
 static void captureParamChanged(void)
 {
   if (captureParam != 0) {
@@ -342,8 +366,21 @@ static void captureParamChanged(void)
   }
 }
 
+static void recordParamChanged(void)
+{
+  if (recordParam == 1) {
+    visualYawStartRecording(VISUAL_YAW_TARGET_REASON_PARAM_REQUEST);
+  } else if (recordParam == 2) {
+    visualYawStopAndSaveRecording(VISUAL_YAW_TARGET_REASON_PARAM_REQUEST);
+  } else if (recordParam == 3) {
+    visualYawAbortRecording(VISUAL_YAW_TARGET_REASON_PARAM_REQUEST);
+  }
+  recordParam = 0;
+}
+
 PARAM_GROUP_START(vyaw)
 PARAM_ADD_WITH_CALLBACK(PARAM_UINT8, capture, &captureParam, captureParamChanged)
+PARAM_ADD_WITH_CALLBACK(PARAM_UINT8, record, &recordParam, recordParamChanged)
 PARAM_GROUP_STOP(vyaw)
 
 LOG_GROUP_START(vyaw)
