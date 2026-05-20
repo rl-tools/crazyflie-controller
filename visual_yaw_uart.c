@@ -42,7 +42,11 @@
 #define TARGET_CAPTURE_COMMAND_RECORD_START 0x02
 #define TARGET_CAPTURE_COMMAND_RECORD_STOP_SAVE 0x03
 #define TARGET_CAPTURE_COMMAND_RECORD_ABORT 0x04
+#define TARGET_CAPTURE_COMMAND_SELECT_SLOT 0x05
 #define TARGET_CAPTURE_FLAG_REQUIRE_ACK 0x01
+#define TARGET_CAPTURE_FLAG_SELECT_AFTER_CAPTURE 0x02
+#define TARGET_CAPTURE_SLOT_SHIFT 4
+#define TARGET_CAPTURE_SLOT_MASK 0x03
 #define VISUAL_YAW_KNOWN_FLAGS (VISUAL_YAW_FLAG_TARGET_VALID | \
                                 VISUAL_YAW_FLAG_PREDICTION_VALID | \
                                 VISUAL_YAW_FLAG_TARGET_CAPTURE_ACK)
@@ -70,6 +74,9 @@ static uint8_t frameFresh = 0;
 static uint8_t targetCommandSeq = 0;
 static uint8_t captureParam = 0;
 static uint8_t recordParam = 0;
+static uint8_t targetSlotParam = 0;
+static uint8_t selectAfterCaptureParam = 1;
+static uint8_t selectParam = 0;
 
 static uint32_t framesOk = 0;
 static uint32_t framesBadCrc = 0;
@@ -78,6 +85,14 @@ static uint32_t framesUnknown = 0;
 static uint32_t frameRestarts = 0;
 static uint32_t targetRequests = 0;
 static uint32_t targetRequestDrops = 0;
+
+static uint8_t targetFlagsWithSlot(uint8_t flags, uint8_t slot)
+{
+  if (slot >= VISUAL_YAW_TARGET_SLOT_COUNT) {
+    slot = 0;
+  }
+  return (flags & 0x0F) | (uint8_t)((slot & TARGET_CAPTURE_SLOT_MASK) << TARGET_CAPTURE_SLOT_SHIFT);
+}
 
 static uint16_t crc16_ccitt(const uint8_t *data, size_t n)
 {
@@ -310,17 +325,21 @@ bool visualYawIsFresh(uint32_t timeoutMs)
           (VISUAL_YAW_FLAG_TARGET_VALID | VISUAL_YAW_FLAG_PREDICTION_VALID));
 }
 
-static void visualYawSendCommand(uint8_t command, uint8_t reason, uint8_t flags)
+static bool visualYawSendCommand(uint8_t command, uint8_t reason, uint8_t flags, uint8_t *seq)
 {
   uint8_t raw[TARGET_CAPTURE_RAW_BYTES];
   uint8_t crcPayload[TARGET_CAPTURE_CRC_PAYLOAD_BYTES];
   uint8_t frame[TARGET_CAPTURE_FRAME_BYTES];
   uint8_t start = FRAME_START_MASK | FRAME_TYPE_TARGET_CAPTURE;
+  uint8_t commandSeq = targetCommandSeq++;
 
-  raw[0] = targetCommandSeq++;
+  raw[0] = commandSeq;
   raw[1] = command;
   raw[2] = reason;
   raw[3] = flags;
+  if (seq != NULL) {
+    *seq = commandSeq;
+  }
 
   crcPayload[0] = start;
   for (int i = 0; i < 4; i++) {
@@ -333,36 +352,67 @@ static void visualYawSendCommand(uint8_t command, uint8_t reason, uint8_t flags)
 
   if (sendAllOrDrop(frame, TARGET_CAPTURE_FRAME_BYTES)) {
     targetRequests++;
+    return true;
   } else {
     targetRequestDrops++;
+    return false;
   }
 }
 
 void visualYawRequestTargetCapture(uint8_t reason)
 {
-  visualYawSendCommand(TARGET_CAPTURE_COMMAND_CURRENT, reason, TARGET_CAPTURE_FLAG_REQUIRE_ACK);
+  (void)visualYawRequestTargetCaptureSlot(0, reason, true, NULL);
+}
+
+bool visualYawRequestTargetCaptureSlot(uint8_t slot, uint8_t reason, bool selectAfterCapture, uint8_t *seq)
+{
+  uint8_t flags = TARGET_CAPTURE_FLAG_REQUIRE_ACK;
+  if (selectAfterCapture) {
+    flags |= TARGET_CAPTURE_FLAG_SELECT_AFTER_CAPTURE;
+  }
+  return visualYawSendCommand(TARGET_CAPTURE_COMMAND_CURRENT, reason,
+                              targetFlagsWithSlot(flags, slot), seq);
+}
+
+bool visualYawSelectTargetSlot(uint8_t slot, uint8_t reason, uint8_t *seq)
+{
+  return visualYawSendCommand(TARGET_CAPTURE_COMMAND_SELECT_SLOT, reason,
+                              targetFlagsWithSlot(TARGET_CAPTURE_FLAG_REQUIRE_ACK, slot), seq);
 }
 
 void visualYawStartRecording(uint8_t reason)
 {
-  visualYawSendCommand(TARGET_CAPTURE_COMMAND_RECORD_START, reason, 0);
+  (void)visualYawSendCommand(TARGET_CAPTURE_COMMAND_RECORD_START, reason, 0, NULL);
 }
 
 void visualYawStopAndSaveRecording(uint8_t reason)
 {
-  visualYawSendCommand(TARGET_CAPTURE_COMMAND_RECORD_STOP_SAVE, reason, 0);
+  (void)visualYawSendCommand(TARGET_CAPTURE_COMMAND_RECORD_STOP_SAVE, reason, 0, NULL);
 }
 
 void visualYawAbortRecording(uint8_t reason)
 {
-  visualYawSendCommand(TARGET_CAPTURE_COMMAND_RECORD_ABORT, reason, 0);
+  (void)visualYawSendCommand(TARGET_CAPTURE_COMMAND_RECORD_ABORT, reason, 0, NULL);
 }
 
 static void captureParamChanged(void)
 {
   if (captureParam != 0) {
-    visualYawRequestTargetCapture(VISUAL_YAW_TARGET_REASON_PARAM_REQUEST);
+    (void)visualYawRequestTargetCaptureSlot(targetSlotParam,
+                                            VISUAL_YAW_TARGET_REASON_PARAM_REQUEST,
+                                            selectAfterCaptureParam != 0,
+                                            NULL);
     captureParam = 0;
+  }
+}
+
+static void selectParamChanged(void)
+{
+  if (selectParam != 0) {
+    (void)visualYawSelectTargetSlot(targetSlotParam,
+                                    VISUAL_YAW_TARGET_REASON_PARAM_REQUEST,
+                                    NULL);
+    selectParam = 0;
   }
 }
 
@@ -379,7 +429,10 @@ static void recordParamChanged(void)
 }
 
 PARAM_GROUP_START(vyaw)
+PARAM_ADD(PARAM_UINT8, slot, &targetSlotParam)
+PARAM_ADD(PARAM_UINT8, selAfter, &selectAfterCaptureParam)
 PARAM_ADD_WITH_CALLBACK(PARAM_UINT8, capture, &captureParam, captureParamChanged)
+PARAM_ADD_WITH_CALLBACK(PARAM_UINT8, select, &selectParam, selectParamChanged)
 PARAM_ADD_WITH_CALLBACK(PARAM_UINT8, record, &recordParam, recordParamChanged)
 PARAM_GROUP_STOP(vyaw)
 

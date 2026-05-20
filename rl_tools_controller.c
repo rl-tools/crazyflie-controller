@@ -29,7 +29,7 @@
 
 #define CONTROL_INTERVAL_MS 2
 #define CONTROL_INTERVAL_US (CONTROL_INTERVAL_MS * 1000)
-#define CONTROL_PACKET_TIMEOUT_USEC (1000*200)
+#define CONTROL_PACKET_TIMEOUT_USEC (1000*400)
 #define BEHIND_SCHEDULE_MESSAGE_MIN_INTERVAL (1000000)
 #define CONTROL_INVOCATION_INTERVAL_ALPHA 0.95f
 #define DEBUG_MEASURE_FORWARD_TIME
@@ -154,6 +154,9 @@ static float visual_yaw_multiplier = 2.0f;
 static float visual_yaw_reference_rad = 0.0f;
 static float visual_yaw_reference_cos = 1.0f;
 static float visual_yaw_reference_sin = 0.0f;
+static float visual_yaw_slot_reference_rad[VISUAL_YAW_TARGET_SLOT_COUNT] = {0.0f, 0.0f};
+static float visual_yaw_slot_reference_cos[VISUAL_YAW_TARGET_SLOT_COUNT] = {1.0f, 1.0f};
+static float visual_yaw_slot_reference_sin[VISUAL_YAW_TARGET_SLOT_COUNT] = {0.0f, 0.0f};
 static float visual_yaw_rad = 0.0f;
 static float visual_yaw_control_rad = 0.0f;
 static uint32_t visual_yaw_age_ms = 0;
@@ -162,6 +165,23 @@ static uint8_t visual_yaw_flags = 0;
 static uint8_t visual_yaw_valid = 0;
 static uint8_t visual_yaw_fresh = 0;
 static uint8_t visual_yaw_reference_valid = 0;
+static uint8_t visual_yaw_slot_reference_valid[VISUAL_YAW_TARGET_SLOT_COUNT] = {0, 0};
+static uint8_t visual_yaw_active_slot = 0;
+static uint8_t visual_yaw_pending_slot = 0;
+static uint8_t visual_yaw_pending_seq = 0;
+static uint8_t visual_yaw_pending_select = 0;
+static uint64_t visual_yaw_pending_since_us = 0;
+static uint32_t visual_yaw_pending_timeout_ms = 200;
+static uint32_t visual_yaw_select_acks = 0;
+static uint32_t visual_yaw_select_timeouts = 0;
+static uint8_t visual_yaw_capture_slot_request = 255;
+static uint8_t visual_yaw_select_slot_request = 255;
+static uint8_t visual_yaw_bounce_enable = 0;
+static uint8_t visual_yaw_recording_active = 0;
+static uint32_t visual_yaw_bounce_ms = 3000;
+static uint64_t visual_yaw_bounce_last_us = 0;
+static uint8_t visual_yaw_bounce_slot_a = 0;
+static uint8_t visual_yaw_bounce_slot_b = 1;
 
 static inline float clip(float v, float low, float high){
   if(v < low){
@@ -187,14 +207,131 @@ static inline float yaw_from_quaternion(float qw, float qx, float qy, float qz){
   return atan2f(yaw_sin, yaw_cos);
 }
 
-static inline void capture_visual_yaw_reference(const state_t* state){
-  visual_yaw_reference_rad = yaw_from_quaternion(state->attitudeQuaternion.w,
-                                                 state->attitudeQuaternion.x,
-                                                 state->attitudeQuaternion.y,
-                                                 state->attitudeQuaternion.z);
-  visual_yaw_reference_cos = cosf(visual_yaw_reference_rad);
-  visual_yaw_reference_sin = sinf(visual_yaw_reference_rad);
+static inline uint8_t valid_visual_yaw_slot(uint8_t slot){
+  return slot < VISUAL_YAW_TARGET_SLOT_COUNT;
+}
+
+static inline void apply_visual_yaw_reference_slot(uint8_t slot){
+  if(!valid_visual_yaw_slot(slot) || visual_yaw_slot_reference_valid[slot] == 0){
+    return;
+  }
+  visual_yaw_active_slot = slot;
+  visual_yaw_reference_rad = visual_yaw_slot_reference_rad[slot];
+  visual_yaw_reference_cos = visual_yaw_slot_reference_cos[slot];
+  visual_yaw_reference_sin = visual_yaw_slot_reference_sin[slot];
   visual_yaw_reference_valid = 1;
+}
+
+static inline void capture_visual_yaw_reference_slot(const state_t* state, uint8_t slot){
+  if(!valid_visual_yaw_slot(slot)){
+    return;
+  }
+  float yaw = yaw_from_quaternion(state->attitudeQuaternion.w,
+                                  state->attitudeQuaternion.x,
+                                  state->attitudeQuaternion.y,
+                                  state->attitudeQuaternion.z);
+  visual_yaw_slot_reference_rad[slot] = yaw;
+  visual_yaw_slot_reference_cos[slot] = cosf(yaw);
+  visual_yaw_slot_reference_sin[slot] = sinf(yaw);
+  visual_yaw_slot_reference_valid[slot] = 1;
+}
+
+static inline void request_visual_yaw_slot_select(uint8_t slot, uint8_t reason, uint64_t now){
+  if(!valid_visual_yaw_slot(slot) || visual_yaw_slot_reference_valid[slot] == 0){
+    return;
+  }
+  uint8_t seq = 0;
+  if(visualYawSelectTargetSlot(slot, reason, &seq)){
+    visual_yaw_pending_slot = slot;
+    visual_yaw_pending_seq = seq;
+    visual_yaw_pending_select = 1;
+    visual_yaw_pending_since_us = now;
+  }
+}
+
+static inline void request_visual_yaw_slot_capture(const state_t* state, uint8_t slot, uint8_t reason, uint64_t now){
+  if(!valid_visual_yaw_slot(slot)){
+    return;
+  }
+  capture_visual_yaw_reference_slot(state, slot);
+  uint8_t seq = 0;
+  if(visualYawRequestTargetCaptureSlot(slot, reason, true, &seq)){
+    visual_yaw_pending_slot = slot;
+    visual_yaw_pending_seq = seq;
+    visual_yaw_pending_select = 1;
+    visual_yaw_pending_since_us = now;
+  }
+}
+
+static inline void handle_visual_yaw_slot_requests(const state_t* state, uint64_t now){
+  if(visual_yaw_capture_slot_request != 255){
+    request_visual_yaw_slot_capture(state, visual_yaw_capture_slot_request,
+                                    VISUAL_YAW_TARGET_REASON_PARAM_REQUEST, now);
+    visual_yaw_capture_slot_request = 255;
+  }
+  if(visual_yaw_select_slot_request != 255){
+    request_visual_yaw_slot_select(visual_yaw_select_slot_request,
+                                   VISUAL_YAW_TARGET_REASON_PARAM_REQUEST, now);
+    visual_yaw_select_slot_request = 255;
+  }
+}
+
+static inline void handle_visual_yaw_bounce(uint64_t now){
+  if(visual_yaw_bounce_enable == 0 || visual_yaw_pending_select != 0 || visual_yaw_bounce_ms == 0){
+    return;
+  }
+  if(now - visual_yaw_bounce_last_us < (uint64_t)visual_yaw_bounce_ms * 1000ULL){
+    return;
+  }
+  uint8_t next_slot = (visual_yaw_active_slot == visual_yaw_bounce_slot_a) ?
+                      visual_yaw_bounce_slot_b : visual_yaw_bounce_slot_a;
+  if(!valid_visual_yaw_slot(next_slot) || visual_yaw_slot_reference_valid[next_slot] == 0){
+    visual_yaw_bounce_last_us = now;
+    return;
+  }
+  request_visual_yaw_slot_select(next_slot, VISUAL_YAW_TARGET_REASON_PARAM_REQUEST, now);
+  if(visual_yaw_pending_select != 0){
+    visual_yaw_bounce_last_us = now;
+  }
+}
+
+static inline uint8_t visual_yaw_activation_slot(void){
+  if(valid_visual_yaw_slot(visual_yaw_bounce_slot_a) &&
+     visual_yaw_slot_reference_valid[visual_yaw_bounce_slot_a] == 0){
+    return visual_yaw_bounce_slot_a;
+  }
+  if(valid_visual_yaw_slot(visual_yaw_bounce_slot_b) &&
+     visual_yaw_slot_reference_valid[visual_yaw_bounce_slot_b] == 0){
+    return visual_yaw_bounce_slot_b;
+  }
+  return valid_visual_yaw_slot(visual_yaw_bounce_slot_a) ?
+         visual_yaw_bounce_slot_a : 0;
+}
+
+static inline void begin_visual_yaw_activation_target(const state_t* state, uint64_t now){
+  uint8_t slot = visual_yaw_activation_slot();
+  visual_yaw_active_slot = slot;
+  visual_yaw_reference_valid = 0;
+  visual_yaw_pending_select = 0;
+  visual_yaw_bounce_last_us = now;
+
+  if(visual_yaw_slot_reference_valid[slot] == 0){
+    request_visual_yaw_slot_capture(state, slot,
+                                    VISUAL_YAW_TARGET_REASON_CONTROLLER_ACTIVATED,
+                                    now);
+  }
+  else{
+    request_visual_yaw_slot_select(slot,
+                                   VISUAL_YAW_TARGET_REASON_CONTROLLER_ACTIVATED,
+                                   now);
+  }
+
+  visual_yaw_bounce_enable =
+    (valid_visual_yaw_slot(visual_yaw_bounce_slot_a) &&
+     valid_visual_yaw_slot(visual_yaw_bounce_slot_b) &&
+     visual_yaw_bounce_slot_a != visual_yaw_bounce_slot_b &&
+     visual_yaw_slot_reference_valid[visual_yaw_bounce_slot_a] != 0 &&
+     visual_yaw_slot_reference_valid[visual_yaw_bounce_slot_b] != 0) ? 1 : 0;
 }
 
 static inline void rotate_world_xy_to_visual_yaw_frame(float x, float y, float *x_out, float *y_out){
@@ -274,6 +411,18 @@ static inline bool visual_yaw_update(float *yaw_rad){
                       ((flags & (VISUAL_YAW_FLAG_TARGET_VALID | VISUAL_YAW_FLAG_PREDICTION_VALID)) ==
                        (VISUAL_YAW_FLAG_TARGET_VALID | VISUAL_YAW_FLAG_PREDICTION_VALID))) ? 1 : 0;
   visual_yaw_fresh = (visual_yaw_valid && age_ms <= visual_yaw_timeout_ms) ? 1 : 0;
+  uint64_t now = usecTimestamp();
+  if(visual_yaw_pending_select != 0){
+    if((flags & VISUAL_YAW_FLAG_TARGET_CAPTURE_ACK) != 0 && target_seq == visual_yaw_pending_seq){
+      apply_visual_yaw_reference_slot(visual_yaw_pending_slot);
+      visual_yaw_pending_select = 0;
+      visual_yaw_select_acks++;
+    }
+    else if(now - visual_yaw_pending_since_us > (uint64_t)visual_yaw_pending_timeout_ms * 1000ULL){
+      visual_yaw_pending_select = 0;
+      visual_yaw_select_timeouts++;
+    }
+  }
   if(yaw_rad != NULL){
     *yaw_rad = control_yaw;
   }
@@ -423,6 +572,28 @@ void controllerOutOfTreeInit(void){
   visual_yaw_valid = 0;
   visual_yaw_fresh = 0;
   visual_yaw_reference_valid = 0;
+  for(uint8_t i = 0; i < VISUAL_YAW_TARGET_SLOT_COUNT; i++){
+    visual_yaw_slot_reference_rad[i] = 0.0f;
+    visual_yaw_slot_reference_cos[i] = 1.0f;
+    visual_yaw_slot_reference_sin[i] = 0.0f;
+    visual_yaw_slot_reference_valid[i] = 0;
+  }
+  visual_yaw_active_slot = 0;
+  visual_yaw_pending_slot = 0;
+  visual_yaw_pending_seq = 0;
+  visual_yaw_pending_select = 0;
+  visual_yaw_pending_since_us = 0;
+  visual_yaw_pending_timeout_ms = 200;
+  visual_yaw_select_acks = 0;
+  visual_yaw_select_timeouts = 0;
+  visual_yaw_capture_slot_request = 255;
+  visual_yaw_select_slot_request = 255;
+  visual_yaw_bounce_enable = 0;
+  visual_yaw_recording_active = 0;
+  visual_yaw_bounce_ms = 3000;
+  visual_yaw_bounce_last_us = 0;
+  visual_yaw_bounce_slot_a = 0;
+  visual_yaw_bounce_slot_b = 1;
   
   waypoint_navigation_target_vel = 0.0;
 
@@ -605,9 +776,11 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
     controllerMellingerFirmwareInit();
     controllerINDIInit();
     // controllerMellingerFirmwareEnableIntegrators(MELLINGER_ENABLE_INTEGRATORS == 1);
-    capture_visual_yaw_reference(state);
-    visualYawStartRecording(VISUAL_YAW_TARGET_REASON_CONTROLLER_ACTIVATED);
-    visualYawRequestTargetCapture(VISUAL_YAW_TARGET_REASON_CONTROLLER_ACTIVATED);
+    begin_visual_yaw_activation_target(state, now);
+    if(visual_yaw_bounce_enable != 0){
+      visualYawStartRecording(VISUAL_YAW_TARGET_REASON_CONTROLLER_ACTIVATED);
+      visual_yaw_recording_active = 1;
+    }
     rl_tools_inference_applications_l2f_reset();
     DEBUG_PRINT("Controller activated\n");
     switch(mode){
@@ -634,10 +807,18 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
   if(prev_set_motors && !set_motors){
     DEBUG_PRINT("Controller deactivated\n");
     visual_yaw_reference_valid = 0;
-    visualYawStopAndSaveRecording(VISUAL_YAW_TARGET_REASON_CONTROLLER_DEACTIVATED);
+    visual_yaw_pending_select = 0;
+    if(visual_yaw_recording_active != 0){
+      visualYawStopAndSaveRecording(VISUAL_YAW_TARGET_REASON_CONTROLLER_DEACTIVATED);
+      visual_yaw_recording_active = 0;
+    }
     for(uint8_t i=0; i<4; i++){
       motorsSetRatio(motors[i], 0);
     }
+  }
+  handle_visual_yaw_slot_requests(state, now);
+  if(set_motors){
+    handle_visual_yaw_bounce(now);
   }
   relative_pos[0] = state->position.x - origin[0];
   relative_pos[1] = state->position.y - origin[1];
@@ -983,6 +1164,12 @@ PARAM_ADD(PARAM_FLOAT, vcmdp, &velocity_cmd_p_term)
 PARAM_ADD(PARAM_UINT8, vyaw, &visual_yaw_enable)
 PARAM_ADD(PARAM_UINT32, vyawTmo, &visual_yaw_timeout_ms)
 PARAM_ADD(PARAM_FLOAT, vyawMul, &visual_yaw_multiplier)
+PARAM_ADD(PARAM_UINT8, vyawCap, &visual_yaw_capture_slot_request)
+PARAM_ADD(PARAM_UINT8, vyawSel, &visual_yaw_select_slot_request)
+PARAM_ADD(PARAM_UINT8, vyawBnc, &visual_yaw_bounce_enable)
+PARAM_ADD(PARAM_UINT32, vyawBms, &visual_yaw_bounce_ms)
+PARAM_ADD(PARAM_UINT8, vyawBA, &visual_yaw_bounce_slot_a)
+PARAM_ADD(PARAM_UINT8, vyawBB, &visual_yaw_bounce_slot_b)
 PARAM_GROUP_STOP(rlt)
 
 
@@ -1024,4 +1211,11 @@ LOG_ADD(LOG_FLOAT, yawCtrl, &visual_yaw_control_rad)
 LOG_ADD(LOG_FLOAT, mul, &visual_yaw_multiplier)
 LOG_ADD(LOG_FLOAT, ref, &visual_yaw_reference_rad)
 LOG_ADD(LOG_UINT8, refValid, &visual_yaw_reference_valid)
+LOG_ADD(LOG_UINT8, slot, &visual_yaw_active_slot)
+LOG_ADD(LOG_UINT8, pend, &visual_yaw_pending_select)
+LOG_ADD(LOG_UINT8, pendSlot, &visual_yaw_pending_slot)
+LOG_ADD(LOG_UINT8, bounce, &visual_yaw_bounce_enable)
+LOG_ADD(LOG_UINT8, rec, &visual_yaw_recording_active)
+LOG_ADD(LOG_UINT32, ack, &visual_yaw_select_acks)
+LOG_ADD(LOG_UINT32, tmo, &visual_yaw_select_timeouts)
 LOG_GROUP_STOP(rltvy)
