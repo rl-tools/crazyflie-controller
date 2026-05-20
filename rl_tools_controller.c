@@ -150,7 +150,9 @@ static uint8_t use_orig_controller = 0;
 
 static uint8_t visual_yaw_enable = 1;
 static uint32_t visual_yaw_timeout_ms = 50;
+static float visual_yaw_multiplier = 2.0f;
 static float visual_yaw_rad = 0.0f;
+static float visual_yaw_control_rad = 0.0f;
 static uint32_t visual_yaw_age_ms = 0;
 static uint8_t visual_yaw_target_seq = 0;
 static uint8_t visual_yaw_flags = 0;
@@ -236,8 +238,10 @@ static inline bool visual_yaw_update(float *yaw_rad){
   uint32_t age_ms = 0;
   float yaw = 0.0f;
   bool has_frame = visualYawGetLatest(&yaw, &target_seq, &flags, &age_ms);
+  float control_yaw = yaw * visual_yaw_multiplier;
 
   visual_yaw_rad = yaw;
+  visual_yaw_control_rad = control_yaw;
   visual_yaw_target_seq = target_seq;
   visual_yaw_flags = flags;
   visual_yaw_age_ms = age_ms;
@@ -246,7 +250,7 @@ static inline bool visual_yaw_update(float *yaw_rad){
                        (VISUAL_YAW_FLAG_TARGET_VALID | VISUAL_YAW_FLAG_PREDICTION_VALID))) ? 1 : 0;
   visual_yaw_fresh = (visual_yaw_valid && age_ms <= visual_yaw_timeout_ms) ? 1 : 0;
   if(yaw_rad != NULL){
-    *yaw_rad = yaw;
+    *yaw_rad = control_yaw;
   }
   return visual_yaw_enable != 0 && visual_yaw_fresh != 0;
 }
@@ -369,7 +373,9 @@ void controllerOutOfTreeInit(void){
   log_set_motors = 0;
   visual_yaw_enable = 1;
   visual_yaw_timeout_ms = 50;
+  visual_yaw_multiplier = 1.0f;
   visual_yaw_rad = 0.0f;
+  visual_yaw_control_rad = 0.0f;
   visual_yaw_age_ms = 0;
   visual_yaw_target_seq = 0;
   visual_yaw_flags = 0;
@@ -930,6 +936,7 @@ PARAM_ADD(PARAM_FLOAT, vcmdm, &velocity_cmd_multiplier)
 PARAM_ADD(PARAM_FLOAT, vcmdp, &velocity_cmd_p_term)
 PARAM_ADD(PARAM_UINT8, vyaw, &visual_yaw_enable)
 PARAM_ADD(PARAM_UINT32, vyawTmo, &visual_yaw_timeout_ms)
+PARAM_ADD(PARAM_FLOAT, vyawMul, &visual_yaw_multiplier)
 PARAM_GROUP_STOP(rlt)
 
 
@@ -967,4 +974,6 @@ LOG_ADD(LOG_UINT8, flags, &visual_yaw_flags)
 LOG_ADD(LOG_UINT8, target, &visual_yaw_target_seq)
 LOG_ADD(LOG_UINT32, age, &visual_yaw_age_ms)
 LOG_ADD(LOG_FLOAT, yaw, &visual_yaw_rad)
+LOG_ADD(LOG_FLOAT, yawCtrl, &visual_yaw_control_rad)
+LOG_ADD(LOG_FLOAT, mul, &visual_yaw_multiplier)
 LOG_GROUP_STOP(rltvy)
