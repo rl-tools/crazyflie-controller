@@ -175,13 +175,30 @@ static inline float clamp_unit(float v){
   return clip(v, -1.0f, 1.0f);
 }
 
-static inline void quat_to_roll_pitch(float qw, float qx, float qy, float qz, float *roll, float *pitch){
-  float sinr_cosp = 2.0f * (qw * qx + qy * qz);
-  float cosr_cosp = 1.0f - 2.0f * (qx * qx + qy * qy);
-  *roll = atan2f(sinr_cosp, cosr_cosp);
+static inline void quat_to_gravity_body(float qw, float qx, float qy, float qz, float gravity_body[3]){
+  gravity_body[0] = 2.0f * (qw * qy - qx * qz);
+  gravity_body[1] = -2.0f * (qx * qw + qy * qz);
+  gravity_body[2] = -1.0f + 2.0f * (qx * qx + qy * qy);
+}
 
-  float sinp = 2.0f * (qw * qy - qz * qx);
-  *pitch = asinf(clamp_unit(sinp));
+static inline void roll_pitch_from_gravity_body(const float gravity_body[3], float *roll, float *pitch){
+  float gx = gravity_body[0];
+  float gy = gravity_body[1];
+  float gz = gravity_body[2];
+  float norm = sqrtf(gx * gx + gy * gy + gz * gz);
+  if(norm > 1.0e-6f){
+    gx /= norm;
+    gy /= norm;
+    gz /= norm;
+  }
+  else{
+    gx = 0.0f;
+    gy = 0.0f;
+    gz = -1.0f;
+  }
+
+  *pitch = asinf(clamp_unit(gx));
+  *roll = atan2f(-gy, -gz);
 }
 
 static inline void quat_from_roll_pitch_yaw(float roll, float pitch, float yaw,
@@ -242,9 +259,11 @@ static inline bool visual_yaw_quaternion(const state_t* state, float *qw, float 
 
   float roll = 0.0f;
   float pitch = 0.0f;
-  quat_to_roll_pitch(state->attitudeQuaternion.w, state->attitudeQuaternion.x,
-                     state->attitudeQuaternion.y, state->attitudeQuaternion.z,
-                     &roll, &pitch);
+  float gravity_body[3];
+  quat_to_gravity_body(state->attitudeQuaternion.w, state->attitudeQuaternion.x,
+                       state->attitudeQuaternion.y, state->attitudeQuaternion.z,
+                       gravity_body);
+  roll_pitch_from_gravity_body(gravity_body, &roll, &pitch);
   quat_from_roll_pitch_yaw(roll, pitch, yaw, qw, qx, qy, qz);
   return true;
 }
