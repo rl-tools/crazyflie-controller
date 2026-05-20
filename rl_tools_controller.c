@@ -151,6 +151,9 @@ static uint8_t use_orig_controller = 0;
 static uint8_t visual_yaw_enable = 1;
 static uint32_t visual_yaw_timeout_ms = 50;
 static float visual_yaw_multiplier = 2.0f;
+static float visual_yaw_reference_rad = 0.0f;
+static float visual_yaw_reference_cos = 1.0f;
+static float visual_yaw_reference_sin = 0.0f;
 static float visual_yaw_rad = 0.0f;
 static float visual_yaw_control_rad = 0.0f;
 static uint32_t visual_yaw_age_ms = 0;
@@ -158,6 +161,7 @@ static uint8_t visual_yaw_target_seq = 0;
 static uint8_t visual_yaw_flags = 0;
 static uint8_t visual_yaw_valid = 0;
 static uint8_t visual_yaw_fresh = 0;
+static uint8_t visual_yaw_reference_valid = 0;
 
 static inline float clip(float v, float low, float high){
   if(v < low){
@@ -175,6 +179,27 @@ static inline float clip(float v, float low, float high){
 
 static inline float clamp_unit(float v){
   return clip(v, -1.0f, 1.0f);
+}
+
+static inline float yaw_from_quaternion(float qw, float qx, float qy, float qz){
+  float yaw_sin = 2.0f * (qx * qy + qw * qz);
+  float yaw_cos = 1.0f - 2.0f * (qy * qy + qz * qz);
+  return atan2f(yaw_sin, yaw_cos);
+}
+
+static inline void capture_visual_yaw_reference(const state_t* state){
+  visual_yaw_reference_rad = yaw_from_quaternion(state->attitudeQuaternion.w,
+                                                 state->attitudeQuaternion.x,
+                                                 state->attitudeQuaternion.y,
+                                                 state->attitudeQuaternion.z);
+  visual_yaw_reference_cos = cosf(visual_yaw_reference_rad);
+  visual_yaw_reference_sin = sinf(visual_yaw_reference_rad);
+  visual_yaw_reference_valid = 1;
+}
+
+static inline void rotate_world_xy_to_visual_yaw_frame(float x, float y, float *x_out, float *y_out){
+  *x_out = visual_yaw_reference_cos * x + visual_yaw_reference_sin * y;
+  *y_out = -visual_yaw_reference_sin * x + visual_yaw_reference_cos * y;
 }
 
 static inline void quat_to_gravity_body(float qw, float qx, float qy, float qz, float gravity_body[3]){
@@ -257,7 +282,7 @@ static inline bool visual_yaw_update(float *yaw_rad){
 
 static inline bool visual_yaw_quaternion(const state_t* state, float *qw, float *qx, float *qy, float *qz){
   float yaw = 0.0f;
-  if(!visual_yaw_update(&yaw)){
+  if(!visual_yaw_update(&yaw) || visual_yaw_reference_valid == 0){
     return false;
   }
 
@@ -273,10 +298,32 @@ static inline bool visual_yaw_quaternion(const state_t* state, float *qw, float 
 }
 
 static inline void update_state(const sensorData_t* sensors, const state_t* state){
+  bool use_visual_yaw_frame = false;
+  float qw = state->attitudeQuaternion.w;
+  float qx = state->attitudeQuaternion.x;
+  float qy = state->attitudeQuaternion.y;
+  float qz = state->attitudeQuaternion.z;
+
+  if(hand_test == 0 || hand_test == 3){
+    use_visual_yaw_frame = visual_yaw_quaternion(state, &qw, &qx, &qy, &qz);
+  }
+  else{
+    visual_yaw_update(NULL);
+    qw = 1.0f;
+    qx = 0.0f;
+    qy = 0.0f;
+    qz = 0.0f;
+  }
+
   if(hand_test == 0){
     float POS_DISTANCE_LIMIT = mode == FIGURE_EIGHT ? pos_distance_limit_figure_eight : pos_distance_limit_position;
-    state_input[ 0] = clip(state->position.x - target_pos[0], -POS_DISTANCE_LIMIT, POS_DISTANCE_LIMIT);
-    state_input[ 1] = clip(state->position.y - target_pos[1], -POS_DISTANCE_LIMIT, POS_DISTANCE_LIMIT);
+    float pos_x = state->position.x - target_pos[0];
+    float pos_y = state->position.y - target_pos[1];
+    if(use_visual_yaw_frame){
+      rotate_world_xy_to_visual_yaw_frame(pos_x, pos_y, &pos_x, &pos_y);
+    }
+    state_input[ 0] = clip(pos_x, -POS_DISTANCE_LIMIT, POS_DISTANCE_LIMIT);
+    state_input[ 1] = clip(pos_y, -POS_DISTANCE_LIMIT, POS_DISTANCE_LIMIT);
     state_input[ 2] = clip(state->position.z - target_pos[2], -POS_DISTANCE_LIMIT, POS_DISTANCE_LIMIT);
   }
   else{
@@ -284,28 +331,19 @@ static inline void update_state(const sensorData_t* sensors, const state_t* stat
     state_input[ 1] = 0;
     state_input[ 2] = 0;
   }
-  if(hand_test == 0 || hand_test == 3){
-    float qw = state->attitudeQuaternion.w;
-    float qx = state->attitudeQuaternion.x;
-    float qy = state->attitudeQuaternion.y;
-    float qz = state->attitudeQuaternion.z;
-    visual_yaw_quaternion(state, &qw, &qx, &qy, &qz);
-    state_input[ 3] = qw;
-    state_input[ 4] = qx;
-    state_input[ 5] = qy;
-    state_input[ 6] = qz;
-  }
-  else{
-    visual_yaw_update(NULL);
-    state_input[ 3] = 1;
-    state_input[ 4] = 0;
-    state_input[ 5] = 0;
-    state_input[ 6] = 0;
-  }
+  state_input[ 3] = qw;
+  state_input[ 4] = qx;
+  state_input[ 5] = qy;
+  state_input[ 6] = qz;
   if(hand_test == 0){
     float VEL_DISTANCE_LIMIT = mode == FIGURE_EIGHT ? vel_distance_limit_figure_eight : vel_distance_limit_position;
-    state_input[ 7] = clip(state->velocity.x - target_vel[0], -VEL_DISTANCE_LIMIT, VEL_DISTANCE_LIMIT);
-    state_input[ 8] = clip(state->velocity.y - target_vel[1], -VEL_DISTANCE_LIMIT, VEL_DISTANCE_LIMIT);
+    float vel_x = state->velocity.x - target_vel[0];
+    float vel_y = state->velocity.y - target_vel[1];
+    if(use_visual_yaw_frame){
+      rotate_world_xy_to_visual_yaw_frame(vel_x, vel_y, &vel_x, &vel_y);
+    }
+    state_input[ 7] = clip(vel_x, -VEL_DISTANCE_LIMIT, VEL_DISTANCE_LIMIT);
+    state_input[ 8] = clip(vel_y, -VEL_DISTANCE_LIMIT, VEL_DISTANCE_LIMIT);
     state_input[ 9] = clip(state->velocity.z - target_vel[2], -VEL_DISTANCE_LIMIT, VEL_DISTANCE_LIMIT);
   }
   else{
@@ -373,7 +411,10 @@ void controllerOutOfTreeInit(void){
   log_set_motors = 0;
   visual_yaw_enable = 1;
   visual_yaw_timeout_ms = 50;
-  visual_yaw_multiplier = 1.0f;
+  visual_yaw_multiplier = 2.0f;
+  visual_yaw_reference_rad = 0.0f;
+  visual_yaw_reference_cos = 1.0f;
+  visual_yaw_reference_sin = 0.0f;
   visual_yaw_rad = 0.0f;
   visual_yaw_control_rad = 0.0f;
   visual_yaw_age_ms = 0;
@@ -381,6 +422,7 @@ void controllerOutOfTreeInit(void){
   visual_yaw_flags = 0;
   visual_yaw_valid = 0;
   visual_yaw_fresh = 0;
+  visual_yaw_reference_valid = 0;
   
   waypoint_navigation_target_vel = 0.0;
 
@@ -563,6 +605,7 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
     controllerMellingerFirmwareInit();
     controllerINDIInit();
     // controllerMellingerFirmwareEnableIntegrators(MELLINGER_ENABLE_INTEGRATORS == 1);
+    capture_visual_yaw_reference(state);
     visualYawRequestTargetCapture(VISUAL_YAW_TARGET_REASON_CONTROLLER_ACTIVATED);
     rl_tools_inference_applications_l2f_reset();
     DEBUG_PRINT("Controller activated\n");
@@ -589,6 +632,7 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
   }
   if(prev_set_motors && !set_motors){
     DEBUG_PRINT("Controller deactivated\n");
+    visual_yaw_reference_valid = 0;
     for(uint8_t i=0; i<4; i++){
       motorsSetRatio(motors[i], 0);
     }
@@ -976,4 +1020,6 @@ LOG_ADD(LOG_UINT32, age, &visual_yaw_age_ms)
 LOG_ADD(LOG_FLOAT, yaw, &visual_yaw_rad)
 LOG_ADD(LOG_FLOAT, yawCtrl, &visual_yaw_control_rad)
 LOG_ADD(LOG_FLOAT, mul, &visual_yaw_multiplier)
+LOG_ADD(LOG_FLOAT, ref, &visual_yaw_reference_rad)
+LOG_ADD(LOG_UINT8, refValid, &visual_yaw_reference_valid)
 LOG_GROUP_STOP(rltvy)
