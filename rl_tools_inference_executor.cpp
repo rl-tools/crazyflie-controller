@@ -9,7 +9,7 @@
 
 #include <rl_tools/inference/executor/executor.h>
 
-#include "data/actor_recurrent.h"
+#include "data/actor.h"
 
 namespace rlt = rl_tools;
 
@@ -27,7 +27,8 @@ struct RL_TOOLS_INFERENCE_APPLICATIONS_L2F_CONFIG{
     using ACTOR_TYPE_ORIGINAL = rlt::checkpoint::actor::TYPE;
     using POLICY_TEST = rlt::checkpoint::actor::TYPE::template CHANGE_BATCH_SIZE<TI, 1>::template CHANGE_SEQUENCE_LENGTH<TI, 1>;
     using POLICY = ACTOR_TYPE_ORIGINAL::template CHANGE_BATCH_SIZE<TI, 1>::template CHANGE_SEQUENCE_LENGTH<TI, 1>;
-    using T = typename POLICY::SPEC::T;
+    using TYPE_POLICY = typename POLICY::SPEC::TYPE_POLICY;
+    using T = typename TYPE_POLICY::DEFAULT;
     static auto& policy() {
         return rlt::checkpoint::actor::module;
     }
@@ -37,8 +38,9 @@ struct RL_TOOLS_INFERENCE_APPLICATIONS_L2F_CONFIG{
     static constexpr TI TIMING_STATS_NUM_STEPS = 100;
     static constexpr bool FORCE_SYNC_INTERMEDIATE = true;
     static constexpr TI FORCE_SYNC_NATIVE = 10;
+    static constexpr bool FORCE_SYNC_NATIVE_RUNTIME = false;
     static constexpr bool DYNAMIC_ALLOCATION = false;
-    struct WARNING_LEVELS: rlt::inference::executor::WarningLevelsDefault<T>{
+    struct WARNING_LEVELS: rlt::inference::executor::WarningLevelsDefault<TYPE_POLICY>{
         static constexpr T INTERMEDIATE_TIMING_JITTER_HIGH_THRESHOLD_NS = 1.3;
         static constexpr T INTERMEDIATE_TIMING_JITTER_LOW_THRESHOLD_NS = 0.7;
     };
