@@ -306,7 +306,7 @@ void controllerOutOfTreeInit(void){
 
 bool controllerOutOfTreeTest(void){
   RLtoolsInferenceApplicationsL2FAction test_output;
-  float test_absdiff = 0; //rl_tools_inference_applications_l2f_test(&test_output);
+  float test_absdiff = rl_tools_inference_applications_l2f_test(&test_output);
   if(test_absdiff < 0){
     test_absdiff = -test_absdiff;
   }
