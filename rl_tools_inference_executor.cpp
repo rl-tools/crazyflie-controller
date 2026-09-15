@@ -41,8 +41,8 @@ struct RL_TOOLS_INFERENCE_APPLICATIONS_L2F_CONFIG{
     static constexpr bool FORCE_SYNC_NATIVE_RUNTIME = false;
     static constexpr bool DYNAMIC_ALLOCATION = false;
     struct WARNING_LEVELS: rlt::inference::executor::WarningLevelsDefault<TYPE_POLICY>{
-        static constexpr T INTERMEDIATE_TIMING_JITTER_HIGH_THRESHOLD_NS = 1.3;
-        static constexpr T INTERMEDIATE_TIMING_JITTER_LOW_THRESHOLD_NS = 0.7;
+        static constexpr T INTERMEDIATE_TIMING_JITTER_HIGH_THRESHOLD = 1.3;
+        static constexpr T INTERMEDIATE_TIMING_JITTER_LOW_THRESHOLD = 0.7;
     };
 
 };
