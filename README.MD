@@ -55,6 +55,19 @@ DYLD_LIBRARY_PATH="/opt/homebrew/lib:$DYLD_LIBRARY_PATH" cfclient
 ```
 
 
+## Cleanup
+
+Note: Changes to tracked files need to be cleaned up manually
+
+```
+git submodule foreach --recursive 'git clean -dffx'
+git clean -dffx
+
+git submodule update --init --recursive -- external/firmware
+git submodule update --init -- external/rl_tools
+```
+
+
 # MOCAP
 
 Please configure the `locSrv.ExtQuatStdDev` such that the yaw estimate is stable
