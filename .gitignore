@@ -13,3 +13,4 @@ ablation_data*
 *.wasm
 .idea
 cmake-build*
+*.o.*

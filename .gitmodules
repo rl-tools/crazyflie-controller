@@ -7,3 +7,6 @@
 [submodule "external/nrf-firmware"]
 	path = external/nrf-firmware
 	url = https://github.com/rl-tools/crazyflie2-nrf-bootloader.git
+[submodule "external/rl_tools"]
+	path = external/rl_tools
+	url = https://github.com/rl-tools/rl-tools.git
