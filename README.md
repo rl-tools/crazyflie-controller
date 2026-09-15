@@ -1,4 +1,4 @@
-> **⚠️ Note**: This was tested with RLtools `d7be0c225fe9a6123c841e0ef01fe1fe4df3de63`
+> **⚠️ Note**: This was tested with RLtools `b32d9985c65a5e098a6bbf190fd994962d288b99`
 >
 
 For good measure please install the `2023.2` firmware using `cfclient` first (to update all the decks and communication firmwares)
@@ -39,6 +39,12 @@ git clean -dfx
 make cf21bl_defconfig
 make
 cfloader flash build/cf21bl.bin stm32-fw -w radio://0/80/2M/E7E7E7E7E9
+```
+
+# Usage
+```
+git submodule update --init --recursive external/cfclient
+pip install -e external/cfclient
 ```
 
 

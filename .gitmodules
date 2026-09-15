@@ -10,3 +10,6 @@
 [submodule "external/rl_tools"]
 	path = external/rl_tools
 	url = https://github.com/rl-tools/rl-tools.git
+[submodule "external/cfclient"]
+	path = external/cfclient
+	url = https://github.com/rl-tools/crazyflie-clients-python.git
