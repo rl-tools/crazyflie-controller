@@ -44,7 +44,8 @@ cfloader flash build/cf21bl.bin stm32-fw -w radio://0/80/2M/E7E7E7E7E9
 # Usage
 ```
 git submodule update --init --recursive external/cfclient
-pip install -e external/cfclient
+pip install -e external/cfclient[joystream]
+JOYSTREAM=1 cfclient
 ```
 
 
