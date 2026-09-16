@@ -1,11 +1,11 @@
-For good measure please install the `2023.2` firmware using `cfclient` first (to update all the decks and communication firmwares)
+For STM32-only flashing, see the radio firmware notes below.
 
 Install dependencies according to the [official docs](https://www.bitcraze.io/documentation/repository/crazyflie-firmware/master/building-and-flashing/build/)
 
 ```
 git submodule update --init --recursive -- external/firmware
 git submodule update --init -- external/rl_tools
-git submodule update --init -- external/blob
+git submodule update --init -- external/blob external/nrf-firmware
 ```
 
 ### macOS
@@ -16,6 +16,11 @@ brew install libusb
 
 
 ### build
+
+Build ZIPs with `./build_firmware.sh cf2` or `./build_firmware.sh cf21bl` (omit the argument for both).
+Outputs: `build/firmware-<platform>.zip`, containing only local STM32/nRF firmware and a manifest. Requires S130 already installed.
+Flash with `cfloader flash build/firmware-<platform>.zip -w <URI>`.
+
 <!-- ```
 cd external/firmware
 make cf2_defconfig
@@ -59,7 +64,7 @@ rlt.target_z_fe = 0.3 # 0.3 m target height (take-off)
 
 
 ### "Too many packets lost" Issue
-To prevent the "Too many packets lost" issue after startup please use the cfclient UI to flash `2023.02` first. This will flash an older firmware for the radio module which has a longer boot delay for better stability. When flashing the modified firmware with cfloader, the radio firmware is not overwritten (you can confirm this in the cfclient console). For the Crazyflie Brushless use `2024.10.2` (not perfect, but more stable than `2025.02`)
+For STM32-only flashes, use `2023.02` radio firmware for CF2 or `2024.10.2` for Brushless. The ZIP builds include the local nRF firmware with the boot delay restored and require S130 already installed.
 ### flash
 ```
 cfloader flash build/cf2.bin stm32-fw -w radio://0/80/2M
@@ -87,6 +92,10 @@ git submodule update --init -- external/rl_tools
 # MOCAP
 
 Please configure the `locSrv.ExtQuatStdDev` such that the yaw estimate is stable
+
+For a local WebSocket pose stream usable from `https://rc.rl.tools`, see the
+[pose server instructions and API](pose/README.md). It includes a Vicon
+adapter, a simulated source, and a JSON input format for other mocap systems.
 
 
 # Facing Connection Issues?
