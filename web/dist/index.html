@@ -23,8 +23,9 @@
     </div>
 
     <div class="workspace">
-      <section class="panel parameters" aria-labelledby="parameters-title">
-        <div class="panel-heading"><h2 id="parameters-title">Parameter configuration</h2><span id="draft-state" class="state-label">DRAFT</span></div>
+      <section class="panel parameter-panel" aria-label="Parameters and firmware console">
+        <div class="panel-heading workspace-heading"><button id="parameters-view" type="button" aria-pressed="true" aria-controls="parameters-page">Parameters</button><button id="console-view" type="button" aria-pressed="false" aria-controls="console-page">Firmware console</button><span id="draft-state" class="state-label">DRAFT</span></div>
+        <div id="parameters-page" class="parameters">
         <div class="editor-heading"><label for="configuration">Local editor</label><span id="line-count">4 parameters</span></div>
         <textarea id="configuration" aria-label="Parameter configuration" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off" aria-describedby="format write-status">rlt.trigger uint8 0
 rlt.gate uint8 1
@@ -34,6 +35,12 @@ rlt.target_z float 0.3</textarea>
         <div class="parameter-actions"><button id="apply" type="button" disabled>Write configuration</button><button id="validate" type="button">Check syntax</button></div>
         <div class="write-result"><span class="field-label">WRITE</span><span id="write-status" role="status">Not sent</span></div>
         <p class="parameter-note">Edits stay local until written. Device writes are immediate and volatile.</p>
+        </div>
+        <div id="console-page" class="firmware-console" hidden>
+          <div class="console-toolbar"><span id="console-status">OFFLINE</span><span id="console-position">0 lines</span><button id="console-older" type="button" aria-label="Older console page" disabled>←</button><button id="console-newer" type="button" aria-label="Newer console page" disabled>→</button><button id="console-pause" type="button" disabled>Pause</button></div>
+          <pre id="firmware-output" tabindex="0" aria-label="Crazyflie firmware console" aria-live="off">Connect to receive firmware output.</pre>
+          <p class="console-note" id="console-note">Read-only · capture continues while the view is paused.</p>
+        </div>
       </section>
 
       <section class="panel controller" aria-labelledby="policy-title">
@@ -65,7 +72,7 @@ rlt.target_z float 0.3</textarea>
       <section data-reference="format"><h3>Parameter format</h3><p>One <code>group.name type value</code> per line. Blank lines and <code># comments</code> are allowed.</p><p><code>uint8 int8 uint16 int16 uint32 int32 uint64 int64 float double</code></p><p>The editor is a local draft. Check syntax without connecting or sending anything. Longer configurations scroll inside the editor; controls stay in place.</p></section>
       <section data-reference="writes" hidden><h3>Write behavior</h3><p>Writing applies parameters in order. Each reply is checked. A failure stops the remaining writes; already confirmed writes remain applied. Configuration is not saved to device flash.</p><p>A timeout leaves the last write unconfirmed: it may have been applied. Reconnect before retrying. Reconnecting also clears this page’s confirmation state.</p></section>
       <section data-reference="commands" hidden><h3>Transmission</h3><p>Hold with a pointer, or focus the hold button and hold Space or Enter. Release, Escape, changing tabs, or losing focus stops the stream.</p><p>Stopping does not send a landing or motor-off command. With <code>rlt.trigger=0</code> and <code>rlt.gate=1</code>, the firmware normally cuts motor output about 200 ms after the last trigger.</p><p>The count reports packets sent by this page, not acknowledgement or motor state.</p></section>
-      <section data-reference="bluetooth" hidden><h3>Bluetooth</h3><p>Use Chrome on a supported platform over HTTPS or localhost. Initial connection can take up to 10 seconds while boot messages drain. Restart the Crazyflie after using Crazyradio.</p><p>Chrome on iOS is unsupported. Linux requires experimental Web Platform features. Legacy nRF firmware cannot acknowledge long parameter names; the app rejects those writes.</p></section>
+      <section data-reference="bluetooth" hidden><h3>Bluetooth and firmware console</h3><p>Initial connection may take 10 seconds while boot messages drain. Firmware console captures up to 1,000 lines. Pause freezes the view, not capture. Reconnect after a power cycle to capture available boot output.</p><p>Legacy nRF firmware loses some BLE data. Console markers ⟦…⟧ identify missing bytes or packets; exact text cannot be recovered. Parameter acknowledgements remain strict.</p><p>Use Chrome over HTTPS or localhost. iOS is unsupported; Linux requires experimental Web Platform features. Restart the Crazyflie after using Crazyradio.</p></section>
     </div>
   </dialog>
 </body>

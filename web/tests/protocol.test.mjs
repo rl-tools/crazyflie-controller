@@ -196,6 +196,34 @@ test('connection drains a boot backlog that exceeds the normal request timeout',
   client.disconnect();
 });
 
+test('console capture polls an idle connection and stops polling on disconnect', async () => {
+  const fake = fakeBluetooth();
+  let consoleText = '';
+  const client = new CrazyflieBluetooth({ ...fake, onConsole: text => { consoleText += text; } });
+  await client.connect();
+  fake.notify(Uint8Array.of(0, ...new TextEncoder().encode('SYS: Ready\n')));
+  assert.equal(consoleText, 'SYS: Ready\n');
+  await new Promise(resolve => setTimeout(resolve, 240));
+  assert.ok(fake.writes.length > 1);
+  assert.ok(fake.writes.slice(1).every(write => write.value.length === 1 && write.value[0] === 0xff));
+  client.disconnect();
+  const count = fake.writes.length;
+  await new Promise(resolve => setTimeout(resolve, 150));
+  assert.equal(fake.writes.length, count);
+});
+
+test('console idle polling yields to foreground controller traffic', async () => {
+  const fake = fakeBluetooth();
+  const client = new CrazyflieBluetooth({ ...fake, onConsole: () => {} });
+  await client.connect();
+  for (let i = 0; i < 6; ++i) {
+    await client.send(LEARNED_PACKET);
+    await new Promise(resolve => setTimeout(resolve, 35));
+  }
+  client.disconnect();
+  assert.equal(fake.writes.length, 7, 'no competing console polls during the foreground stream');
+});
+
 test('firmware errors propagate without claiming success', async () => {
   for (const [status, message] of [[2, /not found/], [13, /read-only/], [22, /type does not match/]]) {
     const client = new CrazyflieBluetooth(fakeBluetooth({ status }));

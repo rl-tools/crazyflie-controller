@@ -1,4 +1,5 @@
 // Wire formats follow param_logic.c, crtp_commander.c and ble_crazyflies.c.
+import { ConsoleReceiver } from './firmware-console.mjs';
 export const SERVICE = '00000201-1c7f-4f9e-947b-43b7c00a9a08';
 export const CRTP = '00000202-1c7f-4f9e-947b-43b7c00a9a08';
 export const CRTP_UP = '00000203-1c7f-4f9e-947b-43b7c00a9a08';
@@ -108,11 +109,13 @@ export class DownlinkDecoder {
 }
 
 export class CrazyflieBluetooth {
-  constructor({ bluetooth = globalThis.navigator?.bluetooth, onState = () => {}, onProgress = () => {}, onError = () => {} } = {}) {
+  constructor({ bluetooth = globalThis.navigator?.bluetooth, onState = () => {}, onProgress = () => {}, onError = () => {}, onConsole = null } = {}) {
     this.bluetooth = bluetooth;
     this.onState = onState;
     this.onProgress = onProgress;
     this.onError = onError;
+    this.onConsole = onConsole;
+    this.lastSend = -Infinity;
     this.generation = 0;
     this.queue = Promise.resolve();
     this.waiter = null;
@@ -126,6 +129,7 @@ export class CrazyflieBluetooth {
     this.connecting = true;
     const generation = ++this.generation;
     this.decoder = new DownlinkDecoder();
+    this.consoleReceiver = this.onConsole ? new ConsoleReceiver(this.onConsole) : null;
     try {
       // Filter by name: this firmware advertises Device Information, not SERVICE.
       const device = await this.bluetooth.requestDevice({ filters: [{ namePrefix: 'Crazyflie' }], optionalServices: [SERVICE] });
@@ -141,7 +145,9 @@ export class CrazyflieBluetooth {
       this.down = await service.getCharacteristic(CRTP_DOWN);
       this.notification = event => {
         const value = event.target.value;
-        const packet = this.decoder.push(new Uint8Array(value.buffer, value.byteOffset, value.byteLength));
+        const bytes = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+        const packet = this.decoder.push(bytes);
+        this.consoleReceiver?.push(bytes, this.decoder.mode);
         if (packet && this.waiter?.matches(packet)) this.waiter.resolve(packet);
       };
       this.down.addEventListener('characteristicvaluechanged', this.notification);
@@ -155,6 +161,7 @@ export class CrazyflieBluetooth {
       if (generation !== this.generation) throw new Error('Connection cancelled.');
       this.ready = true;
       this.onState(true);
+      if (this.onConsole) this.pollConsole(generation);
       return { name: device.name, framing: this.decoder.mode };
     } catch (error) {
       this.disconnect();
@@ -165,6 +172,9 @@ export class CrazyflieBluetooth {
   disconnect() {
     ++this.generation;
     this.ready = false;
+    clearTimeout(this.consoleTimer);
+    this.consoleReceiver?.close();
+    this.consoleReceiver = null;
     this.waiter?.reject(new Error('Bluetooth disconnected.'));
     if (this.down) this.down.removeEventListener('characteristicvaluechanged', this.notification);
     if (this.device) {
@@ -174,6 +184,21 @@ export class CrazyflieBluetooth {
     this.raw = this.up = this.down = this.device = null;
     this.queue = Promise.resolve();
     this.onState(false);
+  }
+
+  pollConsole(generation) {
+    // Foreground requests and controller traffic already drain the downlink.
+    // Keep at most one idle poll in flight, and recheck eligibility in the queue.
+    this.consoleTimer = setTimeout(async () => {
+      const active = () => this.ready && generation === this.generation;
+      if (!active()) return;
+      try {
+        await this.send(Uint8Array.of(0xff), () => active() && !this.waiter && performance.now() - this.lastSend >= 100);
+      } catch (error) {
+        if (active()) { this.disconnect(); this.onError(error); }
+      }
+      if (active()) this.pollConsole(generation);
+    }, 100);
   }
 
   send(packet, allowed = () => true) {
@@ -186,6 +211,7 @@ export class CrazyflieBluetooth {
         if (generation !== this.generation) throw new Error('Bluetooth disconnected.');
         const characteristic = frame.uuid === CRTP ? this.raw : this.up;
         await characteristic.writeValueWithResponse(frame.bytes);
+        this.lastSend = performance.now();
       }
       return true;
     });
