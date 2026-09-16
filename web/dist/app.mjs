@@ -1,10 +1,18 @@
 import { CrazyflieBluetooth, PolicyStream, LEARNED_PACKET, parseConfiguration } from './crazyflie.mjs';
 import { Journal } from './journal.mjs';
+import { ConsoleBuffer } from './firmware-console.mjs';
 
 const $ = id => document.getElementById(id);
 const ui = Object.fromEntries(['connect', 'connection', 'link-state', 'link-detail', 'configuration', 'apply', 'validate', 'write-status', 'draft-state', 'line-count', 'hold', 'once', 'stop', 'policy-status', 'packet-count', 'command-state', 'activity', 'event-time', 'event-level', 'event-position', 'history-mode', 'event-older', 'event-newer', 'event-latest', 'operator-hint', 'reference', 'reference-open', 'reference-close'].map(id => [id, $(id)]));
 const supported = window.isSecureContext && Boolean(navigator.bluetooth);
+for (const id of ['parameters-view', 'console-view', 'parameters-page', 'console-page', 'console-status', 'console-position', 'console-older', 'console-newer', 'console-pause', 'firmware-output', 'console-note']) ui[id] = $(id);
 const journal = new Journal();
+const firmwareConsole = new ConsoleBuffer();
+const consoleMeasure = document.createElement('canvas').getContext('2d');
+let consoleRenderTimer;
+let consoleColumns = 40;
+let consoleRows = 10;
+let consoleDamaged = false;
 const draftKey = 'crazyflie.configuration';
 let busy = false;
 let writing = false;
@@ -60,7 +68,46 @@ function edited() {
   inspectDraft();
 }
 
+function renderConsole() {
+  clearTimeout(consoleRenderTimer);
+  consoleRenderTimer = null;
+  if (ui['console-page'].hidden) return;
+  const output = ui['firmware-output'];
+  const style = getComputedStyle(output);
+  consoleMeasure.font = style.font;
+  const width = output.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+  const height = output.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+  consoleColumns = Math.max(1, Math.floor(width / consoleMeasure.measureText('M').width));
+  consoleRows = Math.max(1, Math.floor(height / parseFloat(style.lineHeight)));
+  const page = firmwareConsole.page(consoleColumns, consoleRows);
+  text(output, page.total ? page.text : client.ready || connecting ? 'Waiting for firmware output…' : 'Connect to receive firmware output.');
+  text(ui['console-status'], firmwareConsole.live ? client.ready || connecting ? 'LIVE' : 'OFFLINE' : 'PAUSED');
+  text(ui['console-position'], page.total ? `${page.start + 1}–${page.end} / ${page.total}` : '0 lines');
+  text(ui['console-pause'], firmwareConsole.live ? 'Pause' : 'Live');
+  ui['console-pause'].disabled = !page.total;
+  ui['console-older'].disabled = !page.older;
+  ui['console-newer'].disabled = !page.newer;
+  text(ui['console-note'], consoleDamaged ? '⟦…⟧ = data lost by BLE firmware. Text is incomplete.' : 'Read-only · capture continues while the view is paused.');
+}
+function scheduleConsole() {
+  if (!consoleRenderTimer) consoleRenderTimer = setTimeout(renderConsole, 100);
+}
+function selectWorkspace(showConsole) {
+  ui['parameters-page'].hidden = showConsole;
+  ui['console-page'].hidden = !showConsole;
+  ui['draft-state'].hidden = showConsole;
+  ui['parameters-view'].setAttribute('aria-pressed', String(!showConsole));
+  ui['console-view'].setAttribute('aria-pressed', String(showConsole));
+  renderConsole();
+}
+
 const client = new CrazyflieBluetooth({
+  onConsole(chunk) {
+    if (chunk.includes('⟦')) consoleDamaged = true;
+    firmwareConsole.append(chunk);
+    scheduleConsole();
+  },
+  onError: report,
   onProgress(message) { text(ui.connection, message); },
   onState(connected) {
     if (!connected) {
@@ -74,6 +121,7 @@ const client = new CrazyflieBluetooth({
     }
     connectedBefore = connected;
     inspectDraft();
+    scheduleConsole();
     update();
   },
 });
@@ -122,6 +170,8 @@ ui.connect.addEventListener('click', async () => {
   connecting = true;
   connectionFailed = false;
   lastIssue = false;
+  if (firmwareConsole.received || firmwareConsole.partial) firmwareConsole.append('\n── New connection ──\n');
+  scheduleConsole();
   text(ui.connection, 'Select a device in Chrome…');
   update();
   try {
@@ -136,6 +186,7 @@ ui.connect.addEventListener('click', async () => {
     report(error);
   } finally {
     connecting = false;
+    scheduleConsole();
     update();
   }
 });
@@ -230,6 +281,12 @@ window.addEventListener('pagehide', () => { stop(); client.disconnect(); });
 ui['event-older'].addEventListener('click', () => { journal.older(); renderJournal(); });
 ui['event-newer'].addEventListener('click', () => { journal.newer(); renderJournal(); });
 ui['event-latest'].addEventListener('click', () => { journal.latest(); renderJournal(); });
+ui['parameters-view'].addEventListener('click', () => selectWorkspace(false));
+ui['console-view'].addEventListener('click', () => selectWorkspace(true));
+ui['console-older'].addEventListener('click', () => { firmwareConsole.older(consoleColumns, consoleRows); renderConsole(); });
+ui['console-newer'].addEventListener('click', () => { firmwareConsole.newer(consoleColumns, consoleRows); renderConsole(); });
+ui['console-pause'].addEventListener('click', () => { if (firmwareConsole.live) firmwareConsole.pause(); else firmwareConsole.resume(); renderConsole(); });
+new ResizeObserver(scheduleConsole).observe(ui['firmware-output']);
 ui['reference-open'].addEventListener('click', () => { stop(); ui.reference.showModal(); });
 ui['reference-close'].addEventListener('click', () => ui.reference.close());
 for (const button of document.querySelectorAll('[data-topic]')) {
