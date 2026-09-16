@@ -9,7 +9,7 @@
 
 #include <rl_tools/inference/executor/executor.h>
 
-#include "data/actor.h"
+#include "external/blob/policy.h"
 
 namespace rlt = rl_tools;
 

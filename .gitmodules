@@ -1,9 +1,6 @@
 [submodule "external/firmware"]
 	path = external/firmware
 	url = https://github.com/rl-tools/crazyflie-firmware.git
-[submodule "data"]
-	path = data
-	url = https://github.com/rl-tools/crazyflie-controller-blob.git
 [submodule "external/nrf-firmware"]
 	path = external/nrf-firmware
 	url = https://github.com/rl-tools/crazyflie2-nrf-bootloader.git
@@ -13,3 +10,6 @@
 [submodule "external/cfclient"]
 	path = external/cfclient
 	url = https://github.com/rl-tools/crazyflie-clients-python.git
+[submodule "external/blob"]
+	path = external/blob
+	url = https://github.com/rl-tools/px4-blob
