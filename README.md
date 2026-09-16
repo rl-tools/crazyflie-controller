@@ -76,8 +76,8 @@ DYLD_LIBRARY_PATH="/opt/homebrew/lib:$DYLD_LIBRARY_PATH" cfclient
 Note: Changes to tracked files need to be cleaned up manually
 
 ```
-git submodule foreach --recursive 'git clean -dffx'
-git clean -dffx
+git submodule foreach --recursive 'git clean -dffx -e .venv/'
+git clean -dffx -e .venv/
 
 git submodule update --init --recursive -- external/firmware
 git submodule update --init -- external/rl_tools

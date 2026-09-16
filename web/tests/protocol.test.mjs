@@ -10,7 +10,7 @@ function fragments(packet, pid = 0) {
   return packet.length <= 19 ? [first] : [first, Uint8Array.of(pid << 5, ...packet.slice(19))];
 }
 
-function fakeBluetooth({ legacy = false, status = 0, acknowledge = true } = {}) {
+function fakeBluetooth({ legacy = false, status = 0, acknowledge = true, polling = false, startupPackets = 2 } = {}) {
   const writes = [];
   let busy = false;
   let prefix;
@@ -23,12 +23,17 @@ function fakeBluetooth({ legacy = false, status = 0, acknowledge = true } = {}) 
       down.dispatchEvent(new Event('characteristicvaluechanged'));
     }
   };
+  // STM32 releases one queued downlink per uplink, including null packets.
+  // Early nRF downlinks can contain zeros instead of their original payload.
+  const pending = Array.from({ length: polling ? startupPackets : 0 }, () => new Uint8Array(9));
+  const respond = packet => polling ? pending.push(packet) : notify(packet);
   const reply = packet => {
-    if ((packet[0] & 0xf3) === 0x20 && packet[1] === 3) notify(Uint8Array.of(0x20, 3, 200, 1, 0, 0, 0, 0));
+    if (polling && pending.length) notify(pending.shift());
+    if ((packet[0] & 0xf3) === 0x20 && packet[1] === 3) respond(Uint8Array.of(0x20, 3, 200, 1, 0, 0, 0, 0));
     else if (acknowledge && (packet[0] & 0xf3) === 0x23 && packet[1] === 0) {
       const first = packet.indexOf(0, 2);
       const second = packet.indexOf(0, first + 1);
-      notify(Uint8Array.of(0x23, ...packet.slice(1, second + 1), status));
+      respond(Uint8Array.of(0x23, ...packet.slice(1, second + 1), status));
     }
   };
   const characteristic = uuid => ({
@@ -165,6 +170,32 @@ test('legacy mode rejects unconfirmable long names before writing', async () => 
   client.disconnect();
 });
 
+test('requests poll queued firmware replies without repeating writes or polling while idle', async () => {
+  const fake = fakeBluetooth({ legacy: true, polling: true });
+  const client = new CrazyflieBluetooth(fake);
+  await client.connect();
+  assert.equal(client.ready, true);
+  assert.deepEqual(fake.writes.map(write => bytes(write.value)), [[0x2c, 3], [0xff], [0xff]]);
+  const command = parameterCommand('rlt.wn', 'uint8', '1');
+  await client.writeParameter(command);
+  assert.deepEqual(fake.writes.slice(3).map(write => bytes(write.value)), [bytes(command.packet), [0xff]]);
+  const count = fake.writes.length;
+  await new Promise(resolve => setTimeout(resolve, 100));
+  assert.equal(fake.writes.length, count, 'polling stops once the acknowledgement arrives');
+  client.disconnect();
+});
+
+test('connection drains a boot backlog that exceeds the normal request timeout', async () => {
+  const fake = fakeBluetooth({ legacy: true, polling: true, startupPackets: 65 });
+  const client = new CrazyflieBluetooth(fake);
+  await client.connect();
+  assert.equal(client.ready, true);
+  assert.equal(fake.writes.length, 66);
+  assert.deepEqual(bytes(fake.writes[0].value), [0x2c, 3]);
+  assert.ok(fake.writes.slice(1).every(write => write.value.length === 1 && write.value[0] === 0xff));
+  client.disconnect();
+});
+
 test('firmware errors propagate without claiming success', async () => {
   for (const [status, message] of [[2, /not found/], [13, /read-only/], [22, /type does not match/]]) {
     const client = new CrazyflieBluetooth(fakeBluetooth({ status }));
@@ -193,9 +224,12 @@ test('timeout closes the link and late acknowledgements cannot confirm another w
   const client = new CrazyflieBluetooth(fake);
   await client.connect();
   const command = parameterCommand('rlt.wn', 'uint8', '1');
-  await assert.rejects(client.request(command.packet, () => false, 15), /No firmware acknowledgement/);
+  await assert.rejects(client.request(command.packet, () => false, 75), /No firmware acknowledgement/);
   assert.equal(client.ready, false);
   assert.equal(fake.device.gatt.connected, false);
+  const count = fake.writes.length;
+  await new Promise(resolve => setTimeout(resolve, 100));
+  assert.equal(fake.writes.length, count, 'polling stops on timeout');
   fake.notify(Uint8Array.of(0x23, ...command.prefix, 0));
   await assert.rejects(client.writeParameter(command), /Connect/);
 });
@@ -209,6 +243,31 @@ test('hardware disconnect rejects an outstanding request and invalidates queued 
   fake.device.gatt.disconnect();
   await rejection;
   assert.equal(client.ready, false);
+});
+
+test('default stream timers preserve the browser receiver', async t => {
+  const scheduled = [];
+  const cancelled = [];
+  t.mock.method(globalThis, 'setTimeout', function (callback, delay) {
+    assert.equal(this, globalThis, 'setTimeout requires the browser global receiver');
+    scheduled.push({ callback, delay });
+    return 42;
+  });
+  t.mock.method(globalThis, 'clearTimeout', function (timer) {
+    assert.equal(this, globalThis, 'clearTimeout requires the browser global receiver');
+    cancelled.push(timer);
+  });
+  const errors = [];
+  const stream = new PolicyStream(async () => true, { clock: () => 0, onError: error => errors.push(error) });
+  stream.stop();
+  stream.start();
+  await settle();
+  assert.deepEqual(errors, []);
+  assert.equal(scheduled.length, 1);
+  assert.equal(scheduled[0].delay, 50);
+  stream.stop();
+  assert.deepEqual(cancelled, [undefined, 42]);
+  assert.equal(stream.active, false);
 });
 
 test('hold stream cancels pending writes and does not restart after release', async () => {

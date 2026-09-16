@@ -20,6 +20,7 @@ function log(message) {
 function report(error) { log(`Error: ${error.message}`); }
 
 const client = new CrazyflieBluetooth({
+  onProgress(message) { ui.connection.textContent = message; },
   onState(connected) {
     if (!connected) {
       stop();

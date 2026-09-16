@@ -108,9 +108,10 @@ export class DownlinkDecoder {
 }
 
 export class CrazyflieBluetooth {
-  constructor({ bluetooth = globalThis.navigator?.bluetooth, onState = () => {}, onError = () => {} } = {}) {
+  constructor({ bluetooth = globalThis.navigator?.bluetooth, onState = () => {}, onProgress = () => {}, onError = () => {} } = {}) {
     this.bluetooth = bluetooth;
     this.onState = onState;
+    this.onProgress = onProgress;
     this.onError = onError;
     this.generation = 0;
     this.queue = Promise.resolve();
@@ -130,6 +131,7 @@ export class CrazyflieBluetooth {
       const device = await this.bluetooth.requestDevice({ filters: [{ namePrefix: 'Crazyflie' }], optionalServices: [SERVICE] });
       if (generation !== this.generation) throw new Error('Connection cancelled.');
       this.device = device;
+      this.onProgress(`Connecting to ${device.name}…`);
       this.disconnected = () => this.disconnect();
       device.addEventListener('gattserverdisconnected', this.disconnected);
       const server = await device.gatt.connect();
@@ -144,8 +146,12 @@ export class CrazyflieBluetooth {
       };
       this.down.addEventListener('characteristicvaluechanged', this.notification);
       await this.down.startNotifications();
+      this.onProgress('Waiting for firmware…');
       // Probe the parameter service without changing any device state.
-      await this.request(Uint8Array.of(0x2c, 3), p => (p[0] & 0xf3) === 0x20 && p[1] === 3 && p.length === 8);
+      // Boot console messages share this reply queue and can take several seconds
+      // to drain before parameter information arrives.
+      await this.request(Uint8Array.of(0x2c, 3), p => (p[0] & 0xf3) === 0x20 && p[1] === 3 && p.length === 8,
+        10000, 'Bluetooth connected, but the firmware did not answer the parameter-info request. No parameters changed.');
       if (generation !== this.generation) throw new Error('Connection cancelled.');
       this.ready = true;
       this.onState(true);
@@ -187,17 +193,34 @@ export class CrazyflieBluetooth {
     return job;
   }
 
-  async request(packet, matches, timeout = 3000) {
+  async request(packet, matches, timeout = 3000, timeoutMessage = 'No firmware acknowledgement. The write may have been applied; reconnect before retrying.') {
     if (this.waiter) throw new Error('Another parameter request is in progress.');
     let timer;
+    let pollTimer;
+    let pending = true;
     let waiter;
     const reply = new Promise((resolve, reject) => {
-      waiter = { matches, resolve, reject };
+      waiter = {
+        matches,
+        resolve: value => { pending = false; resolve(value); },
+        reject: error => { pending = false; reject(error); },
+      };
       this.waiter = waiter;
-      timer = setTimeout(() => reject(new Error('No firmware acknowledgement. The write may have been applied; reconnect before retrying.')), timeout);
+      timer = setTimeout(() => waiter.reject(new Error(timeoutMessage)), timeout);
     });
+    // STM32 radiolink releases one queued reply per incoming packet, even over
+    // BLE. Null CRTP packets drain that queue without repeating a parameter write.
+    const poll = async () => {
+      try {
+        await this.send(Uint8Array.of(0xff), () => pending);
+        if (pending) pollTimer = setTimeout(poll, 50);
+      } catch (error) { waiter.reject(error); }
+    };
     // Attach rejection handling immediately; a disconnect may precede GATT completion.
-    const write = this.send(packet).catch(error => { waiter.reject(error); throw error; });
+    const write = this.send(packet).then(sent => {
+      if (pending) pollTimer = setTimeout(poll, 50);
+      return sent;
+    }).catch(error => { waiter.reject(error); throw error; });
     try {
       const [, response] = await Promise.all([write, reply]);
       return response;
@@ -206,7 +229,9 @@ export class CrazyflieBluetooth {
       this.disconnect();
       throw error;
     } finally {
+      pending = false;
       clearTimeout(timer);
+      clearTimeout(pollTimer);
       if (this.waiter === waiter) this.waiter = null;
     }
   }
@@ -233,7 +258,7 @@ export class CrazyflieBluetooth {
 
 // One write at a time, no queued trigger backlog, and no resumption after stop.
 export class PolicyStream {
-  constructor(send, { onChange = () => {}, onError = () => {}, clock = () => performance.now(), schedule = setTimeout, cancel = clearTimeout } = {}) {
+  constructor(send, { onChange = () => {}, onError = () => {}, clock = () => performance.now(), schedule = (fn, delay) => globalThis.setTimeout(fn, delay), cancel = timer => globalThis.clearTimeout(timer) } = {}) {
     Object.assign(this, { send, onChange, onError, clock, schedule, cancel });
     this.token = 0;
     this.active = false;
