@@ -273,7 +273,7 @@ void controllerOutOfTreeInit(void){
   action_output[2] = 0;
   action_output[3] = 0;
 
-  target_height = 0.0;
+  target_height = 0.3;
   target_height_figure_eight = 0.0;
 
   mode = NORMAL;
