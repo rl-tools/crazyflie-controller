@@ -1,6 +1,3 @@
-> **⚠️ Note**: This was tested with RLtools `b32d9985c65a5e098a6bbf190fd994962d288b99`
->
-
 For good measure please install the `2023.2` firmware using `cfclient` first (to update all the decks and communication firmwares)
 
 Install dependencies according to the [official docs](https://www.bitcraze.io/documentation/repository/crazyflie-firmware/master/building-and-flashing/build/)
@@ -8,6 +5,7 @@ Install dependencies according to the [official docs](https://www.bitcraze.io/do
 ```
 git submodule update --init --recursive -- external/firmware
 git submodule update --init -- external/rl_tools
+git submodule update --init -- external/blob
 ```
 
 ### macOS
