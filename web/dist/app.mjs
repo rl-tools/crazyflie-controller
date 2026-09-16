@@ -1,31 +1,79 @@
 import { CrazyflieBluetooth, PolicyStream, LEARNED_PACKET, parseConfiguration } from './crazyflie.mjs';
+import { Journal } from './journal.mjs';
 
 const $ = id => document.getElementById(id);
-const ui = Object.fromEntries(['connect', 'connection', 'compatibility', 'configuration', 'apply', 'write-status', 'hold', 'once', 'stop', 'policy-status', 'activity'].map(id => [id, $(id)]));
+const ui = Object.fromEntries(['connect', 'connection', 'link-state', 'link-detail', 'configuration', 'apply', 'validate', 'write-status', 'draft-state', 'line-count', 'hold', 'once', 'stop', 'policy-status', 'packet-count', 'command-state', 'activity', 'event-time', 'event-level', 'event-position', 'history-mode', 'event-older', 'event-newer', 'event-latest', 'operator-hint', 'reference', 'reference-open', 'reference-close'].map(id => [id, $(id)]));
 const supported = window.isSecureContext && Boolean(navigator.bluetooth);
+const journal = new Journal();
+const draftKey = 'crazyflie.configuration';
 let busy = false;
+let writing = false;
 let connecting = false;
 let actionEpoch = 0;
 let activePointer = null;
 let activeKey = null;
-const logLines = [];
+let draftState = 'UNSENT';
+let connectionFailed = false;
+let connectedBefore = false;
+let intentionalDisconnect = false;
+let lastIssue = false;
 
-function log(message) {
-  logLines.push(`${new Date().toLocaleTimeString()}  ${message}`);
-  if (logLines.length > 40) logLines.shift();
-  ui.activity.textContent = logLines.join('\n');
-  ui.activity.scrollTop = ui.activity.scrollHeight;
+function text(element, value) {
+  if (element.textContent !== String(value)) element.textContent = value;
+}
+function renderJournal() {
+  const event = journal.current;
+  if (!event) return;
+  text(ui.activity, event.message);
+  text(ui['event-time'], event.time.toLocaleTimeString([], { hour12: false }));
+  ui['event-time'].dateTime = event.time.toISOString();
+  text(ui['event-level'], event.level);
+  ui.activity.closest('.journal').dataset.level = event.level;
+  text(ui['event-position'], `${journal.index + 1} / ${journal.entries.length}`);
+  text(ui['history-mode'], journal.live ? 'LATEST' : 'HISTORY');
+  ui['event-older'].disabled = journal.index <= 0;
+  ui['event-newer'].disabled = journal.live || journal.index >= journal.entries.length - 1;
+  ui['event-latest'].disabled = journal.live;
+}
+function log(message, level = 'INFO') {
+  journal.append(message, level);
+  renderJournal();
+}
+function report(error) {
+  lastIssue = true;
+  log(error.message, 'ERROR');
+  update();
+}
+function inspectDraft() {
+  try {
+    const commands = parseConfiguration(ui.configuration.value);
+    text(ui['line-count'], `${commands.length} parameter${commands.length === 1 ? '' : 's'}`);
+  } catch {
+    text(ui['line-count'], 'Check syntax');
+  }
+  text(ui['draft-state'], draftState);
+}
+function edited() {
+  draftState = 'EDITED';
+  text(ui['write-status'], 'Edited locally · not sent');
+  try { sessionStorage.setItem(draftKey, ui.configuration.value); } catch { /* Editor remains usable without storage. */ }
+  inspectDraft();
 }
 
-function report(error) { log(`Error: ${error.message}`); }
-
 const client = new CrazyflieBluetooth({
-  onProgress(message) { ui.connection.textContent = message; },
+  onProgress(message) { text(ui.connection, message); },
   onState(connected) {
     if (!connected) {
       stop();
-      ui.connection.textContent = 'Disconnected';
+      text(ui.connection, 'Disconnected');
+      if (connectedBefore) {
+        draftState = 'UNVERIFIED';
+        text(ui['write-status'], 'Device disconnected · values unverified');
+        if (!intentionalDisconnect) log('Bluetooth connection closed. Transmission stopped; device values are unverified.', 'WARN');
+      }
     }
+    connectedBefore = connected;
+    inspectDraft();
     update();
   },
 });
@@ -33,20 +81,26 @@ const client = new CrazyflieBluetooth({
 const stream = new PolicyStream((packet, allowed) => client.send(packet, allowed), {
   onChange(active, count) {
     ui.hold.setAttribute('aria-pressed', String(active));
-    ui['policy-status'].textContent = active ? `Transmitting · ${count} packets sent` : 'Not transmitting';
+    text(ui['policy-status'], active ? 'Transmitting' : 'Idle');
+    text(ui['packet-count'], count);
     update();
   },
   onError: report,
 });
 
 function update() {
-  ui.connect.disabled = connecting || !supported;
-  ui.connect.textContent = connecting ? 'Connecting…' : client.ready ? 'Disconnect' : 'Connect Crazyflie';
+  ui.connect.disabled = connecting || !supported || (busy && !client.ready);
+  text(ui.connect, connecting ? 'Connecting…' : client.ready ? 'Disconnect' : 'Connect');
+  ui['link-state'].dataset.state = connecting ? 'connecting' : client.ready ? 'connected' : connectionFailed ? 'error' : 'disconnected';
+  text(ui['link-detail'], connecting ? 'READ-ONLY HANDSHAKE' : client.ready ? 'LINK ESTABLISHED' : 'No active link');
   ui.apply.disabled = !client.ready || busy || stream.active;
+  ui.validate.disabled = busy || stream.active;
   ui.configuration.disabled = busy || stream.active;
   ui.hold.disabled = !client.ready || busy;
   ui.once.disabled = !client.ready || busy || stream.active;
-  ui.stop.disabled = !stream.active && !busy;
+  ui.stop.disabled = !stream.active && (!busy || writing);
+  text(ui['command-state'], stream.active ? 'SENDING' : busy ? 'BUSY' : client.ready ? 'READY' : 'OFFLINE');
+  text(ui['operator-hint'], lastIssue ? 'Error recorded · use Latest in the event journal.' : stream.active ? 'Release or press Esc to stop sending.' : busy ? 'Operation in progress.' : client.ready ? 'Connected · commands use the device’s current parameters.' : 'Connect to enable device commands.');
 }
 
 function stop() {
@@ -59,19 +113,26 @@ function stop() {
 ui.connect.addEventListener('click', async () => {
   if (client.ready) {
     stop();
+    intentionalDisconnect = true;
     client.disconnect();
+    intentionalDisconnect = false;
     log('Disconnected.');
     return;
   }
   connecting = true;
-  ui.connection.textContent = 'Choose a Crazyflie in the Bluetooth dialog…';
+  connectionFailed = false;
+  lastIssue = false;
+  text(ui.connection, 'Select a device in Chrome…');
   update();
   try {
     const result = await client.connect();
-    ui.connection.textContent = `Connected to ${result.name}`;
-    log(`Connected to ${result.name}. No parameters changed.`);
-    if (result.framing === 'legacy') log('Legacy nRF downlink detected. Long parameter acknowledgements are unsupported; see web/README.md.');
+    text(ui.connection, `Connected · ${result.name}`);
+    draftState = 'UNSENT';
+    text(ui['write-status'], 'Not sent on this connection');
+    inspectDraft();
+    log(`Connected to ${result.name}. No parameters changed.${result.framing === 'legacy' ? ' Legacy nRF: long parameter acknowledgements are unsupported.' : ''}`, 'OK');
   } catch (error) {
+    connectionFailed = true;
     report(error);
   } finally {
     connecting = false;
@@ -79,43 +140,60 @@ ui.connect.addEventListener('click', async () => {
   }
 });
 
+ui.validate.addEventListener('click', () => {
+  try {
+    const commands = parseConfiguration(ui.configuration.value);
+    log(`Syntax valid: ${commands.length} parameters. Names and types will be checked by the firmware when written. Nothing sent.`, 'OK');
+    lastIssue = false;
+    update();
+  } catch (error) { report(error); }
+});
+
 ui.apply.addEventListener('click', async () => {
   if (!client.ready || busy || stream.active) return;
   let confirmed = 0;
   try {
     const commands = parseConfiguration(ui.configuration.value);
-    // Validate the entire batch before any write; firmware application is sequential.
     commands.forEach(command => client.validateCommand(command));
     const generation = client.generation;
     busy = true;
+    writing = true;
+    lastIssue = false;
+    draftState = 'WRITING';
+    inspectDraft();
     update();
     for (const command of commands) {
       if (client.generation !== generation) throw new Error('Connection changed; remaining writes cancelled.');
-      ui['write-status'].textContent = `Writing ${command.name}…`;
+      text(ui['write-status'], `${confirmed + 1}/${commands.length} · ${command.name}`);
       await client.writeParameter(command);
       ++confirmed;
-      log(`Confirmed ${command.name} = ${command.value} (${command.type}).`);
+      log(`Confirmed ${command.name} = ${command.value} (${command.type}).`, 'OK');
     }
-    ui['write-status'].textContent = `${confirmed} parameters confirmed`;
+    draftState = 'CONFIRMED';
+    text(ui['write-status'], `${confirmed} / ${commands.length} acknowledged`);
   } catch (error) {
-    ui['write-status'].textContent = `Stopped · ${confirmed} writes confirmed`;
+    draftState = confirmed ? 'PARTIAL' : 'UNCONFIRMED';
+    text(ui['write-status'], `Stopped · ${confirmed} acknowledged`);
     report(error);
   } finally {
     busy = false;
+    writing = false;
+    inspectDraft();
     update();
   }
 });
-ui.configuration.addEventListener('input', () => { ui['write-status'].textContent = 'Edited · not sent'; });
+ui.configuration.addEventListener('input', edited);
 
 ui.once.addEventListener('click', async () => {
   if (!client.ready || busy || stream.active || document.hidden) return;
   const epoch = actionEpoch;
   const started = performance.now();
   busy = true;
+  lastIssue = false;
   update();
   try {
     const sent = await client.send(LEARNED_PACKET, () => epoch === actionEpoch && !document.hidden && performance.now() - started < 150);
-    log(sent ? 'One learned-controller packet sent (no firmware acknowledgement for this command).' : 'Single packet cancelled before transmission.');
+    log(sent ? 'One learned-controller packet sent. This command has no firmware acknowledgement.' : 'Single packet cancelled before transmission.', sent ? 'OK' : 'INFO');
   } catch (error) { report(error); }
   finally { busy = false; update(); }
 });
@@ -126,6 +204,7 @@ ui.hold.addEventListener('pointerdown', event => {
   ui.hold.focus();
   activePointer = event.pointerId;
   ui.hold.setPointerCapture(event.pointerId);
+  lastIssue = false;
   stream.start();
 });
 for (const eventName of ['pointerup', 'pointercancel', 'lostpointercapture']) {
@@ -137,6 +216,7 @@ ui.hold.addEventListener('keydown', event => {
   event.preventDefault();
   if (event.repeat || ui.hold.disabled || stream.active) return;
   activeKey = event.key;
+  lastIssue = false;
   stream.start();
 });
 window.addEventListener('keyup', event => { if (event.key === activeKey) stop(); });
@@ -147,16 +227,28 @@ window.addEventListener('blur', stop);
 document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); });
 window.addEventListener('pagehide', () => { stop(); client.disconnect(); });
 
-if (!window.isSecureContext || !navigator.bluetooth) {
-  ui.compatibility.hidden = false;
-  ui.compatibility.textContent = !window.isSecureContext
-    ? 'Bluetooth requires HTTPS or localhost. A plain HTTP address on your local network will not work.'
-    : 'Web Bluetooth is unavailable. Use Chrome on a supported platform; on Linux enable experimental Web Platform features. Chrome on iOS is unsupported.';
-  ui.connect.disabled = true;
+ui['event-older'].addEventListener('click', () => { journal.older(); renderJournal(); });
+ui['event-newer'].addEventListener('click', () => { journal.newer(); renderJournal(); });
+ui['event-latest'].addEventListener('click', () => { journal.latest(); renderJournal(); });
+ui['reference-open'].addEventListener('click', () => { stop(); ui.reference.showModal(); });
+ui['reference-close'].addEventListener('click', () => ui.reference.close());
+for (const button of document.querySelectorAll('[data-topic]')) {
+  button.addEventListener('click', () => {
+    for (const topic of document.querySelectorAll('[data-topic]')) topic.setAttribute('aria-pressed', String(topic === button));
+    for (const page of document.querySelectorAll('[data-reference]')) page.hidden = page.dataset.reference !== button.dataset.topic;
+  });
 }
 
-// Optional agent integration only stages text or reads status. Connecting and
-// sending motor-triggering packets remain explicit actions in the visible UI.
+try {
+  const saved = sessionStorage.getItem(draftKey);
+  if (saved !== null) ui.configuration.value = saved;
+} catch { /* Storage is optional. */ }
+inspectDraft();
+log(supported ? 'Ready. Connect to a powered-on Crazyflie. The editor contains a local draft; no parameters have been sent.' : !window.isSecureContext ? 'Bluetooth requires HTTPS or localhost. A plain HTTP address on your local network will not work.' : 'Web Bluetooth is unavailable. Use Chrome on a supported platform. Chrome on iOS is unsupported; Linux requires experimental Web Platform features.', supported ? 'INFO' : 'ERROR');
+update();
+
+// Agent integration can only edit a local draft or read status. Device operations
+// require the same explicit controls as ordinary use.
 const context = document.modelContext;
 if (context?.registerTool) {
   const lifecycle = new AbortController();
@@ -184,7 +276,7 @@ if (context?.registerTool) {
       if (busy || stream.active) throw new Error('Stop transmission and wait for writes to finish before editing.');
       const commands = parseConfiguration(input.configuration);
       ui.configuration.value = input.configuration;
-      ui['write-status'].textContent = 'Edited · not sent';
+      edited();
       return { staged: commands.length, sent: false };
     },
   });

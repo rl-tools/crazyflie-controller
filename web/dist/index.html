@@ -3,49 +3,70 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Configure Crazyflie parameters and send learned-controller commands over Bluetooth.">
-  <title>Crazyflie Bluetooth controller</title>
+  <meta name="description" content="Crazyflie Bluetooth configuration and learned-controller console.">
+  <title>Crazyflie · Control console</title>
   <link rel="stylesheet" href="./style.css">
   <script type="module" src="./app.mjs"></script>
 </head>
 <body>
-  <main>
-    <header>
-      <div><p class="eyebrow">CRAZYFLIE / BLUETOOTH LE</p><h1>Controller</h1></div>
-      <button id="connect" type="button">Connect Crazyflie</button>
+  <main class="console">
+    <header class="masthead">
+      <h1>CRAZYFLIE <span>/ CONTROL CONSOLE</span></h1>
+      <div class="masthead-actions"><span class="transport-label">BLUETOOTH LE</span><button id="reference-open" type="button">Reference</button></div>
     </header>
-    <p id="connection" role="status">Disconnected</p>
-    <p id="compatibility" class="notice" hidden></p>
 
-    <section aria-labelledby="parameters-title">
-      <div class="section-heading"><h2 id="parameters-title">Parameters</h2><span>01</span></div>
-      <label for="configuration">Configuration</label>
-      <p id="format" class="muted">One parameter per line: <code>group.name type value</code>. Lines beginning with # are comments.</p>
-      <textarea id="configuration" rows="7" spellcheck="false" aria-describedby="format">rlt.trigger uint8 0
+    <div class="connection-bar" data-state="disconnected" id="link-state">
+      <span class="state-marker" aria-hidden="true"></span>
+      <span id="connection" role="status">Disconnected</span>
+      <span id="link-detail">No device selected</span>
+      <button id="connect" type="button">Connect</button>
+    </div>
+
+    <div class="workspace">
+      <section class="panel parameters" aria-labelledby="parameters-title">
+        <div class="panel-heading"><h2 id="parameters-title">Parameter configuration</h2><span id="draft-state" class="state-label">DRAFT</span></div>
+        <div class="editor-heading"><label for="configuration">Local editor</label><span id="line-count">4 parameters</span></div>
+        <textarea id="configuration" aria-label="Parameter configuration" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off" aria-describedby="format write-status">rlt.trigger uint8 0
 rlt.gate uint8 1
 rlt.wn uint8 1
 rlt.target_z float 0.3</textarea>
-      <div class="actions"><button id="apply" type="button" disabled>Write configuration</button><span id="write-status" role="status">Nothing sent</span></div>
-      <p class="muted">Types: uint8, int8, uint16, int16, uint32, int32, uint64, int64, float, double. Writes take effect immediately and are not saved to persistent storage.</p>
+        <div id="format" class="format-line"><code>group.name type value</code><span># comment</span></div>
+        <div class="parameter-actions"><button id="apply" type="button" disabled>Write configuration</button><button id="validate" type="button">Check syntax</button></div>
+        <div class="write-result"><span class="field-label">WRITE</span><span id="write-status" role="status">Not sent</span></div>
+        <p class="parameter-note">Edits stay local until written. Device writes are immediate and volatile.</p>
+      </section>
+
+      <section class="panel controller" aria-labelledby="policy-title">
+        <div class="panel-heading"><h2 id="policy-title">Learned controller</h2><span id="command-state" class="state-label">OFFLINE</span></div>
+        <p class="motor-notice">Can start motors. Uses current device parameters.</p>
+        <div class="transmission-readout">
+          <div><span class="field-label">TRANSMISSION</span><strong id="policy-status" role="status">Idle</strong></div>
+          <div><span class="field-label">RATE</span><strong>20 <small>Hz</small></strong></div>
+          <div><span class="field-label">HOLD COUNT</span><strong id="packet-count">0</strong></div>
+        </div>
+        <button id="hold" class="hold" type="button" aria-pressed="false" disabled><span>Hold to transmit</span><span class="button-detail">RELEASE TO STOP</span></button>
+        <div class="command-actions"><button id="once" type="button" disabled>Send one packet</button><button id="stop" type="button" disabled>Stop sending <kbd>Esc</kbd></button></div>
+        <div class="command-notes"><p>Release, <kbd>Esc</kbd>, or loss of focus stops transmission.</p><p><strong>Stop sending is not a landing command.</strong> With <code>trigger=0</code> and <code>gate=1</code>, motor output normally cuts after ~200 ms.</p></div>
+      </section>
+    </div>
+
+    <section class="panel journal" aria-labelledby="activity-title">
+      <div class="panel-heading journal-heading"><h2 id="activity-title">Event journal</h2><span id="history-mode" class="state-label">LATEST</span><span id="event-position">0 / 0</span><div class="journal-actions"><button id="event-older" type="button" disabled aria-label="Previous event">←</button><button id="event-newer" type="button" disabled aria-label="Next event">→</button><button id="event-latest" type="button" disabled>Latest</button></div></div>
+      <div class="event-record"><div class="event-metadata"><time id="event-time">—</time><span id="event-level">INFO</span></div><p id="activity" role="status" aria-live="polite">Ready. Connect to a powered-on Crazyflie.</p></div>
     </section>
 
-    <section aria-labelledby="policy-title">
-      <div class="section-heading"><h2 id="policy-title">Learned controller</h2><span>02</span></div>
-      <p>This command can start the motors. It uses the parameters currently on the drone.</p>
-      <div class="actions">
-        <button id="hold" class="hold" type="button" aria-pressed="false" disabled>Hold to send · 20 Hz</button>
-        <button id="once" class="secondary" type="button" disabled>Send one packet</button>
-        <button id="stop" class="secondary" type="button" disabled>Stop sending</button>
-      </div>
-      <p id="policy-status" role="status">Not transmitting</p>
-      <p class="muted">Release, Escape, leaving the page, or losing focus stops transmission. This is not a landing command. With rlt.trigger=0 and rlt.gate=1, the firmware normally cuts motor output about 200 ms after the last trigger.</p>
-    </section>
-
-    <section aria-labelledby="activity-title">
-      <div class="section-heading"><h2 id="activity-title">Activity</h2><span>03</span></div>
-      <pre id="activity" role="log" aria-live="polite">Ready. Connect to a powered-on Crazyflie.</pre>
-    </section>
-    <footer>Chrome on Android, macOS, Windows, or ChromeOS. Linux requires experimental Web Platform features. Use HTTPS or localhost. Restart the Crazyflie after using Crazyradio to re-enable Bluetooth.</footer>
+    <footer><span id="operator-hint">Connect to enable device commands.</span><span>ESC · STOP TRANSMISSION</span></footer>
   </main>
+
+  <dialog id="reference" aria-labelledby="reference-title">
+    <div class="panel-heading"><h2 id="reference-title">Operator reference</h2><button id="reference-close" type="button">Close <kbd>Esc</kbd></button></div>
+    <nav class="reference-topics" aria-label="Reference topics"><button type="button" data-topic="format" aria-pressed="true">Format</button><button type="button" data-topic="writes" aria-pressed="false">Writes</button><button type="button" data-topic="commands" aria-pressed="false">Commands</button><button type="button" data-topic="bluetooth" aria-pressed="false">Bluetooth</button></nav>
+    <div class="reference-content">
+      <section data-reference="format"><h3>Parameter format</h3><p>One <code>group.name type value</code> per line. Blank lines and <code># comments</code> are allowed.</p><p><code>uint8 int8 uint16 int16 uint32 int32 uint64 int64 float double</code></p><p>The editor is a local draft. Check syntax without connecting or sending anything. Longer configurations scroll inside the editor; controls stay in place.</p></section>
+      <section data-reference="writes" hidden><h3>Write behavior</h3><p>Writing applies parameters in order. Each reply is checked. A failure stops the remaining writes; already confirmed writes remain applied. Configuration is not saved to device flash.</p><p>A timeout leaves the last write unconfirmed: it may have been applied. Reconnect before retrying. Reconnecting also clears this page’s confirmation state.</p></section>
+      <section data-reference="commands" hidden><h3>Transmission</h3><p>Hold with a pointer, or focus the hold button and hold Space or Enter. Release, Escape, changing tabs, or losing focus stops the stream.</p><p>Stopping does not send a landing or motor-off command. With <code>rlt.trigger=0</code> and <code>rlt.gate=1</code>, the firmware normally cuts motor output about 200 ms after the last trigger.</p><p>The count reports packets sent by this page, not acknowledgement or motor state.</p></section>
+      <section data-reference="bluetooth" hidden><h3>Bluetooth</h3><p>Use Chrome on a supported platform over HTTPS or localhost. Initial connection can take up to 10 seconds while boot messages drain. Restart the Crazyflie after using Crazyradio.</p><p>Chrome on iOS is unsupported. Linux requires experimental Web Platform features. Legacy nRF firmware cannot acknowledge long parameter names; the app rejects those writes.</p></section>
+    </div>
+  </dialog>
 </body>
 </html>
