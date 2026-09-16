@@ -704,7 +704,8 @@ void controllerOutOfTree(control_t *control, setpoint_t *setpoint, const sensorD
         motorsSetRatio(motors[1], 0);
         motorsSetRatio(motors[2], 0);
         motorsSetRatio(motors[3], 0);
-        motorsStop();
+        // The stabilizer sends DShot after this controller returns; motorsStop()
+        // would start a second transfer in the same control cycle.
       }
       else{
         controllerPid(control, setpoint, sensors, state, tick);

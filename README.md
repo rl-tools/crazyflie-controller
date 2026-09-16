@@ -36,14 +36,25 @@ cfloader flash build/cf2.bin stm32-fw -w radio://0/80/2M/E7E7E7E7E7
 git clean -dfx
 make cf21bl_defconfig
 make
-cfloader flash build/cf21bl.bin stm32-fw -w radio://0/80/2M/E7E7E7E7E9
+cfloader flash build/cf21bl.bin stm32-fw -w radio://0/80/2M/E7E7E7E7E9 # Note: use the correct id here, we assigned different ones for cf2 and cfbl
 ```
 
 # Usage
 ```
 git submodule update --init --recursive external/cfclient
+deactivate
+python3 -m venv .venv
+. .venv/bin/activate
 pip install -e external/cfclient[joystream]
 JOYSTREAM=1 cfclient
+```
+### Figure Eight Tracking
+Set these Crazyflie parameters (from the `cfclient` UI)
+```sh
+rlt.fes = 0.2 # Scale of the figure eight in [m]
+rlt.fei = 3 # 3 s interval
+rlt.wn = 4 # Figure eight tracking mode (0 = position hold)
+rlt.target_z_fe = 0.3 # 0.3 m target height (take-off)
 ```
 
 
