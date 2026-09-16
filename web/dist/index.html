@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Configure Crazyflie parameters and send learned-controller commands over Bluetooth.">
+  <title>Crazyflie Bluetooth controller</title>
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./app.mjs"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <div><p class="eyebrow">CRAZYFLIE / BLUETOOTH LE</p><h1>Controller</h1></div>
+      <button id="connect" type="button">Connect Crazyflie</button>
+    </header>
+    <p id="connection" role="status">Disconnected</p>
+    <p id="compatibility" class="notice" hidden></p>
+
+    <section aria-labelledby="parameters-title">
+      <div class="section-heading"><h2 id="parameters-title">Parameters</h2><span>01</span></div>
+      <label for="configuration">Configuration</label>
+      <p id="format" class="muted">One parameter per line: <code>group.name type value</code>. Lines beginning with # are comments.</p>
+      <textarea id="configuration" rows="7" spellcheck="false" aria-describedby="format">rlt.trigger uint8 0
+rlt.gate uint8 1
+rlt.wn uint8 1
+rlt.target_z float 0.3</textarea>
+      <div class="actions"><button id="apply" type="button" disabled>Write configuration</button><span id="write-status" role="status">Nothing sent</span></div>
+      <p class="muted">Types: uint8, int8, uint16, int16, uint32, int32, uint64, int64, float, double. Writes take effect immediately and are not saved to persistent storage.</p>
+    </section>
+
+    <section aria-labelledby="policy-title">
+      <div class="section-heading"><h2 id="policy-title">Learned controller</h2><span>02</span></div>
+      <p>This command can start the motors. It uses the parameters currently on the drone.</p>
+      <div class="actions">
+        <button id="hold" class="hold" type="button" aria-pressed="false" disabled>Hold to send · 20 Hz</button>
+        <button id="once" class="secondary" type="button" disabled>Send one packet</button>
+        <button id="stop" class="secondary" type="button" disabled>Stop sending</button>
+      </div>
+      <p id="policy-status" role="status">Not transmitting</p>
+      <p class="muted">Release, Escape, leaving the page, or losing focus stops transmission. This is not a landing command. With rlt.trigger=0 and rlt.gate=1, the firmware normally cuts motor output about 200 ms after the last trigger.</p>
+    </section>
+
+    <section aria-labelledby="activity-title">
+      <div class="section-heading"><h2 id="activity-title">Activity</h2><span>03</span></div>
+      <pre id="activity" role="log" aria-live="polite">Ready. Connect to a powered-on Crazyflie.</pre>
+    </section>
+    <footer>Chrome on Android, macOS, Windows, or ChromeOS. Linux requires experimental Web Platform features. Use HTTPS or localhost. Restart the Crazyflie after using Crazyradio to re-enable Bluetooth.</footer>
+  </main>
+</body>
+</html>
