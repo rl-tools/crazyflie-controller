@@ -79,7 +79,7 @@ class ViconTests(unittest.TestCase):
     def run_list_command(self, sdk):
         stdout, stderr = StringIO(), StringIO()
         with patch.dict(sys.modules, {"pyvicon_datastream": sdk}), \
-                patch.object(sys, "argv", ["pose.vicon", "--host", "vicon", "--list"]), \
+                patch.object(sys, "argv", ["poseproxy.vicon", "--host", "vicon", "--list"]), \
                 redirect_stdout(stdout), redirect_stderr(stderr):
             vicon_main()
         return stdout.getvalue(), stderr.getvalue()

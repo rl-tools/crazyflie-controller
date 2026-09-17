@@ -1,22 +1,22 @@
-# Pose WebSocket server
+# poseproxy
 
 Streams one rigid body from any mocap system to a browser. Requires Python 3.10+.
 
-Run from the repository root:
+Install from PyPI:
 
 ```sh
 python3 -m venv .venv
 . .venv/bin/activate
-pip install ./pose
-pose --demo
+pip install poseproxy
+poseproxy --demo
 ```
 
 For Vicon:
 
 ```sh
-pip install './pose[vicon]'
-pose.vicon --host 192.154.4.124 --list  # List current object names
-pose.vicon --host 192.154.4.124 --subject crazyflie | pose
+pip install 'poseproxy[vicon]'
+poseproxy.vicon --host 192.154.4.124 --list  # List current object names
+poseproxy.vicon --host 192.154.4.124 --subject crazyflie | poseproxy
 ```
 
 Vicon uses the root segment; override with `--segment NAME`. Server defaults:
@@ -45,7 +45,7 @@ Other adapters must emit this format as flushed, newline-delimited JSON to
 stdout, with diagnostics on stderr:
 
 ```sh
-python -u my_mocap_adapter.py | pose
+python -u my_mocap_adapter.py | poseproxy
 ```
 
 ## Browser
@@ -63,4 +63,5 @@ Grant Chrome's local/loopback permission. Allowed origins: `https://rc.rl.tools`
 `http://localhost:8000`, `http://127.0.0.1:8000`; extend with `--allow-origin URL`.
 `/health` returns `last_pose_age_s` (`null` before any sample).
 
-Tests: `python -B -m unittest discover -s pose/tests -v`.
+From the repository root: `pip install ./poseproxy`.
+Tests: `python -B -m unittest discover -s poseproxy/tests -v`.

@@ -72,7 +72,7 @@ def main():
     try:
         import pyvicon_datastream as sdk
     except ImportError:
-        parser.exit(1, "Install the Vicon adapter dependency: pip install pyvicon-datastream==0.2.4\n")
+        parser.exit(1, "Install the Vicon adapter: pip install 'poseproxy[vicon]'\n")
     stream = None
     try:
         if args.list_objects:

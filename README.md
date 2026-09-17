@@ -94,7 +94,7 @@ git submodule update --init -- external/rl_tools
 Please configure the `locSrv.ExtQuatStdDev` such that the yaw estimate is stable
 
 For a local WebSocket pose stream usable from `https://rc.rl.tools`, see the
-[pose server instructions and API](pose/README.md). It includes a Vicon
+[poseproxy instructions and API](poseproxy/README.md). It includes a Vicon
 adapter, a simulated source, and a JSON input format for other mocap systems.
 
 
