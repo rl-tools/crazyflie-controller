@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "pose"
+name = "poseproxy"
 version = "0.0.1"
 description = "Simple Pose Forwarder For Motion Capturing Systems"
 readme = "README.md"
