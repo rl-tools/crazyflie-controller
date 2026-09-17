@@ -57,6 +57,19 @@ rlt.target_z float 0.3</textarea>
       </section>
     </div>
 
+    <section class="panel pose-panel" id="pose-panel" data-state="disconnected" aria-labelledby="pose-title">
+      <div class="panel-heading"><h2 id="pose-title">Pose</h2><span id="pose-age" class="pose-age">No samples</span><span id="pose-state" class="state-label">DISCONNECTED</span></div>
+      <div class="pose-body">
+        <form id="pose-form" class="pose-connection">
+          <label for="pose-address" class="field-label">LOCAL SERVER</label>
+          <div class="pose-address-row"><input id="pose-address" type="url" value="ws://127.0.0.1:8765/pose" required spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="pose-status"><button id="pose-connect" type="submit">Connect</button></div>
+          <p id="pose-status" role="status">Start the local pose server, then connect.</p>
+        </form>
+        <div class="pose-vector"><h3>Position <span>m · X forward / Y left / Z up</span></h3><dl class="pose-components position-components"><div><dt>X</dt><dd id="pose-px">—</dd></div><div><dt>Y</dt><dd id="pose-py">—</dd></div><div><dt>Z</dt><dd id="pose-pz">—</dd></div></dl><p class="pose-sample">Sample time <span id="pose-timestamp">—</span><span> · Unix</span></p></div>
+        <div class="pose-vector"><h3>Quaternion <span>body → world</span></h3><dl class="pose-components quaternion-components"><div><dt>X</dt><dd id="pose-qx">—</dd></div><div><dt>Y</dt><dd id="pose-qy">—</dd></div><div><dt>Z</dt><dd id="pose-qz">—</dd></div><div><dt>W</dt><dd id="pose-qw">—</dd></div></dl></div>
+      </div>
+    </section>
+
     <section class="panel journal" aria-labelledby="activity-title">
       <div class="panel-heading journal-heading"><h2 id="activity-title">Event journal</h2><span id="history-mode" class="state-label">LATEST</span><span id="event-position">0 / 0</span><div class="journal-actions"><button id="event-older" type="button" disabled aria-label="Previous event">←</button><button id="event-newer" type="button" disabled aria-label="Next event">→</button><button id="event-latest" type="button" disabled>Latest</button></div></div>
       <div class="event-record"><div class="event-metadata"><time id="event-time">—</time><span id="event-level">INFO</span></div><p id="activity" role="status" aria-live="polite">Ready. Connect to a powered-on Crazyflie.</p></div>

@@ -1,6 +1,7 @@
 import { CrazyflieBluetooth, PolicyStream, LEARNED_PACKET, parseConfiguration } from './crazyflie.mjs';
 import { Journal } from './journal.mjs';
 import { ConsoleBuffer } from './firmware-console.mjs';
+import { mountPosePanel } from './pose-panel.mjs';
 
 const $ = id => document.getElementById(id);
 const ui = Object.fromEntries(['connect', 'connection', 'link-state', 'link-detail', 'configuration', 'apply', 'validate', 'write-status', 'draft-state', 'line-count', 'hold', 'once', 'stop', 'policy-status', 'packet-count', 'command-state', 'activity', 'event-time', 'event-level', 'event-position', 'history-mode', 'event-older', 'event-newer', 'event-latest', 'operator-hint', 'reference', 'reference-open', 'reference-close'].map(id => [id, $(id)]));
@@ -303,6 +304,8 @@ try {
 inspectDraft();
 log(supported ? 'Ready. Connect to a powered-on Crazyflie. The editor contains a local draft; no parameters have been sent.' : !window.isSecureContext ? 'Bluetooth requires HTTPS or localhost. A plain HTTP address on your local network will not work.' : 'Web Bluetooth is unavailable. Use Chrome on a supported platform. Chrome on iOS is unsupported; Linux requires experimental Web Platform features.', supported ? 'INFO' : 'ERROR');
 update();
+
+mountPosePanel($('pose-panel'), log);
 
 // Agent integration can only edit a local draft or read status. Device operations
 // require the same explicit controls as ordinary use.
