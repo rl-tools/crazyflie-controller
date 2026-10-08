@@ -8,6 +8,8 @@ Open <http://localhost:8000> in Chrome. Linux: enable `chrome://flags/#enable-ex
 
 Connect, enter `group.name type value`, then **Write configuration**. Send the learned-controller packet once or hold for 20 Hz. Releasing stops transmission; it does not land.
 
+The editor starts with a figure-eight configuration. Add `# comments` after parameter values or on their own lines; comments and blank lines are ignored.
+
 With bundled nRF firmware, the app blocks long names such as `rlt.motor_warmup`.
 
 **Firmware console** shows the Crazyflie's CRTP console output, including startup messages still queued when connected. Capture continues while viewing Parameters or while paused. Use the arrows to page through the last 1,000 lines and **Live** to follow new output. Power-cycle and reconnect to capture a fresh boot; reconnecting alone does not replay messages already consumed.

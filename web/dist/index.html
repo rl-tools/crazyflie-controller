@@ -26,12 +26,15 @@
       <section class="panel parameter-panel" aria-label="Parameters and firmware console">
         <div class="panel-heading workspace-heading"><button id="parameters-view" type="button" aria-pressed="true" aria-controls="parameters-page">Parameters</button><button id="console-view" type="button" aria-pressed="false" aria-controls="console-page">Firmware console</button><span id="draft-state" class="state-label">DRAFT</span></div>
         <div id="parameters-page" class="parameters">
-        <div class="editor-heading"><label for="configuration">Local editor</label><span id="line-count">4 parameters</span></div>
-        <textarea id="configuration" aria-label="Parameter configuration" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off" aria-describedby="format write-status">rlt.trigger uint8 0
-rlt.gate uint8 1
-rlt.wn uint8 1
-rlt.target_z float 0.3</textarea>
-        <div id="format" class="format-line"><code>group.name type value</code><span># comment</span></div>
+        <div class="editor-heading"><label for="configuration">Local editor</label><span id="line-count">7 parameters</span></div>
+        <textarea id="configuration" aria-label="Parameter configuration" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off" aria-describedby="format write-status">rlt.trigger uint8 0 # Use learned-controller triggers
+rlt.gate uint8 1 # Stop motors when triggers stop
+rlt.wn uint8 4 # Figure-eight mode
+rlt.target_z float 0.3 # Hold/waypoint height offset (m)
+rlt.fes float 0.2 # Figure-eight scale (m)
+rlt.target_z_fe float 0.3 # Figure-eight height offset (m)
+rlt.fei float 3.0 # Figure-eight loop period (s)</textarea>
+        <div id="format" class="format-line"><code>group.name type value</code><span>Inline # comments allowed</span></div>
         <div class="parameter-actions"><button id="apply" type="button" disabled>Write configuration</button><button id="validate" type="button">Check syntax</button></div>
         <div class="write-result"><span class="field-label">WRITE</span><span id="write-status" role="status">Not sent</span></div>
         <p class="parameter-note">Edits stay local until written. Device writes are immediate and volatile.</p>
@@ -82,7 +85,7 @@ rlt.target_z float 0.3</textarea>
     <div class="panel-heading"><h2 id="reference-title">Operator reference</h2><button id="reference-close" type="button">Close <kbd>Esc</kbd></button></div>
     <nav class="reference-topics" aria-label="Reference topics"><button type="button" data-topic="format" aria-pressed="true">Format</button><button type="button" data-topic="writes" aria-pressed="false">Writes</button><button type="button" data-topic="commands" aria-pressed="false">Commands</button><button type="button" data-topic="bluetooth" aria-pressed="false">Bluetooth</button></nav>
     <div class="reference-content">
-      <section data-reference="format"><h3>Parameter format</h3><p>One <code>group.name type value</code> per line. Blank lines and <code># comments</code> are allowed.</p><p><code>uint8 int8 uint16 int16 uint32 int32 uint64 int64 float double</code></p><p>The editor is a local draft. Check syntax without connecting or sending anything. Longer configurations scroll inside the editor; controls stay in place.</p></section>
+      <section data-reference="format"><h3>Parameter format</h3><p>One <code>group.name type value</code> per line. Add <code># comments</code> after values or on their own lines. Blank lines are allowed.</p><p><code>uint8 int8 uint16 int16 uint32 int32 uint64 int64 float double</code></p><p>The editor is a local draft. Check syntax without connecting or sending anything. Longer configurations scroll inside the editor; controls stay in place.</p></section>
       <section data-reference="writes" hidden><h3>Write behavior</h3><p>Writing applies parameters in order. Each reply is checked. A failure stops the remaining writes; already confirmed writes remain applied. Configuration is not saved to device flash.</p><p>A timeout leaves the last write unconfirmed: it may have been applied. Reconnect before retrying. Reconnecting also clears this page’s confirmation state.</p></section>
       <section data-reference="commands" hidden><h3>Transmission</h3><p>Hold with a pointer, or focus the hold button and hold Space or Enter. Release, Escape, changing tabs, or losing focus stops the stream.</p><p>Stopping does not send a landing or motor-off command. With <code>rlt.trigger=0</code> and <code>rlt.gate=1</code>, the firmware normally cuts motor output about 200 ms after the last trigger.</p><p>The count reports packets sent by this page, not acknowledgement or motor state.</p></section>
       <section data-reference="bluetooth" hidden><h3>Bluetooth and firmware console</h3><p>Initial connection may take 10 seconds while boot messages drain. Firmware console captures up to 1,000 lines. Pause freezes the view, not capture. Reconnect after a power cycle to capture available boot output.</p><p>Legacy nRF firmware loses some BLE data. Console markers ⟦…⟧ identify missing bytes or packets; exact text cannot be recovered. Parameter acknowledgements remain strict.</p><p>Use Chrome over HTTPS or localhost. iOS is unsupported; Linux requires experimental Web Platform features. Restart the Crazyflie after using Crazyradio.</p></section>
